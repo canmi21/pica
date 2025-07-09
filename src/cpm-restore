@@ -1,0 +1,11 @@
+Register service{
+    # 用于提醒用户，在更新 sysupgrade 后恢复软件包
+}
+
+backup_packges{
+    # 执行备份包 pkg.build 加入 sysupgrade 白名单
+}
+
+restore(
+    # 执行恢复包，通过 sysupgrade 白名单获取更新前的包
+)

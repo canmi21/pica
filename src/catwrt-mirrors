@@ -1,1 +1,5 @@
+#!/bin/sh
 
+get_catwrt{
+    #获取 catwrt 的 version 和 arch 信息，类似于 cattools 中的 apply_repo
+}
