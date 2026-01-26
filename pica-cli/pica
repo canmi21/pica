@@ -101,6 +101,46 @@ detect_platform() {
   uname -m
 }
 
+normalize_uname() {
+  # Map common uname -m values to pica short names.
+  # - x86_64 -> amd64
+  # - aarch64 -> arm64
+  local value="$1"
+  case "$value" in
+    x86_64) echo amd64 ;;
+    aarch64) echo arm64 ;;
+    *) echo "$value" ;;
+  esac
+}
+
+detect_opkg_arches() {
+  # OpenWrt architecture list as understood by opkg.
+  # Example lines:
+  #   arch all 1
+  #   arch aarch64_cortex-a53 10
+  opkg print-architecture 2>/dev/null | awk '{print $2}'
+}
+
+detect_luci_variant() {
+  # Best-effort detection.
+  # - OpenWrt classic LuCI uses Lua.
+  # - luci2 is JS-based.
+  if command -v uhttpd >/dev/null 2>&1; then
+    :
+  fi
+
+  if opkg status luci 2>/dev/null | grep -qi '^Status: .*installed'; then
+    echo lua1
+    return 0
+  fi
+  if opkg status luci2 2>/dev/null | grep -qi '^Status: .*installed'; then
+    echo js2
+    return 0
+  fi
+  # Alternative package names exist; keep it conservative.
+  echo unknown
+}
+
 fetch_url() {
   local url="$1"
   if [[ "$url" == file://* ]]; then
@@ -266,7 +306,6 @@ install_pkgfile() {
 
   tar -xzf "$pkgfile" -C "$tmpdir"
   [[ -f "$tmpdir/manifest" ]] || die "package missing manifest"
-  [[ -d "$tmpdir/binary" ]] || die "package missing binary/"
   [[ -d "$tmpdir/cmd" ]] || die "package missing cmd/"
 
   local manifest_json pkgname pica
@@ -275,22 +314,62 @@ install_pkgfile() {
   pica="$(manifest_get_first "$manifest_json" pica)"
   local pkg_platform
   pkg_platform="$(manifest_get_first "$manifest_json" platform)"
+  local pkg_arch
+  pkg_arch="$(manifest_get_first "$manifest_json" arch)"
+  local pkg_uname
+  pkg_uname="$(manifest_get_first "$manifest_json" uname)"
+  local pkg_luci
+  pkg_luci="$(manifest_get_first "$manifest_json" luci)"
   [[ -n "$pkgname" ]] || die "manifest missing pkgname"
   [[ -n "$pica" ]] || die "manifest missing pica"
   [[ -n "$pkg_platform" ]] || die "manifest missing platform"
+  [[ -n "$pkg_arch" ]] || die "manifest missing arch"
   [[ "$pica" == "$PICA_VERSION" ]] || die "incompatible pica version: pkg=$pica cli=$PICA_VERSION"
 
+  # platform is informational (used for store/repo display), do not gate installs.
   local host_platform
   host_platform="$(detect_platform)"
-  case "$pkg_platform" in
-    any|all|openwrt-any) : ;;
-    "$host_platform") : ;;
-    *)
-      die "unsupported platform: pkg=$pkg_platform host=$host_platform"
-      ;;
-  esac
+
+  # 1) uname compatibility check first (portable baseline)
+  local host_uname_raw host_uname
+  host_uname_raw="$(uname -m)"
+  host_uname="$(normalize_uname "$host_uname_raw")"
+  local pkg_uname_norm
+  pkg_uname_norm="$(normalize_uname "$pkg_uname")"
+  if [[ -n "$pkg_uname" && "$pkg_uname_norm" != "$host_uname" ]]; then
+    die "unsupported uname: pkg=$pkg_uname host=$host_uname_raw"
+  fi
+
+  # 2) arch match (pica-specific tag)
+  # 2) arch match (OpenWrt/opkg arch). Recommended: use `all`.
+  if [[ "$pkg_arch" != "all" ]]; then
+    local host_arches
+    host_arches="$(detect_opkg_arches || true)"
+    if ! grep -qxF "$pkg_arch" <<<"$host_arches"; then
+      die "unsupported arch: pkg=$pkg_arch (opkg arches: $(tr '\n' ' ' <<<"$host_arches" | sed -e 's/[[:space:]]\+/ /g' -e 's/[[:space:]]$//'))"
+    fi
+  fi
+
+  if [[ -n "$pkg_luci" ]]; then
+    local host_luci
+    host_luci="$(detect_luci_variant)"
+    if [[ "$host_luci" == "unknown" ]]; then
+      die "luci variant required ($pkg_luci) but cannot detect host"
+    fi
+    if [[ "$host_luci" != "$pkg_luci" ]]; then
+      die "unsupported luci variant: pkg=$pkg_luci host=$host_luci"
+    fi
+  fi
 
   log_info "Installing $pkgname..."
+  log_info "  platform: $pkg_platform (host: $host_platform)"
+  log_info "  arch: $pkg_arch"
+  if [[ -n "$pkg_uname" ]]; then
+    log_info "  uname: $pkg_uname (host: $host_uname_raw)"
+  fi
+  if [[ -n "$pkg_luci" ]]; then
+    log_info "  luci: $pkg_luci"
+  fi
 
   # 1) install opkg deps (best-effort, no dependency tracking)
   while IFS= read -r dep; do
@@ -299,13 +378,15 @@ install_pkgfile() {
     opkg install "$dep" || die "opkg install depend failed: $dep"
   done < <(manifest_get_array "$manifest_json" depend || true)
 
-  # 2) install bundled ipks in binary/
-  local ipk
-  shopt -s nullglob
-  for ipk in "$tmpdir/binary"/*.ipk; do
-    opkg install "$ipk" || die "opkg install ipk failed: $ipk"
-  done
-  shopt -u nullglob
+  # 2) install bundled ipks in optional binary/
+  if [[ -d "$tmpdir/binary" ]]; then
+    local ipk
+    shopt -s nullglob
+    for ipk in "$tmpdir/binary"/*.ipk; do
+      opkg install "$ipk" || die "opkg install ipk failed: $ipk"
+    done
+    shopt -u nullglob
+  fi
 
   # 3) install cmd/ payload to /usr/bin
   mkdir -p /usr/bin
@@ -314,6 +395,12 @@ install_pkgfile() {
   else
     # very minimal fallback
     tar -C "$tmpdir/cmd" -cf - . | tar -C /usr/bin -xf -
+  fi
+
+  # 4) optional cmd/.env -> /etc/pica/env.d/<pkgname>.env
+  if [[ -f "$tmpdir/cmd/.env" ]]; then
+    mkdir -p /etc/pica/env.d
+    cp -f "$tmpdir/cmd/.env" "/etc/pica/env.d/${pkgname}.env"
   fi
 
   db_set_installed "$pkgname" "$manifest_json" "$(readlink -f "$pkgfile" 2>/dev/null || echo "$pkgfile")"
@@ -344,6 +431,11 @@ remove_pkg() {
     log_info "removing opkg package: $opkg_name"
     opkg remove "$opkg_name" || die "opkg remove failed: $opkg_name"
   done < <(manifest_get_array "$manifest_json" opkg || true)
+
+  if [[ -f "/etc/pica/env.d/${pkgname}.env" ]]; then
+    log_info "removing env: /etc/pica/env.d/${pkgname}.env"
+    rm -f "/etc/pica/env.d/${pkgname}.env" || true
+  fi
 
   db_del_installed "$pkgname"
   log_info "Transaction completed"

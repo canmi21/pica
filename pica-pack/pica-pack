@@ -79,29 +79,36 @@ main_build() {
 
   [[ -d "$staging_dir" ]] || die "not a directory: $staging_dir"
   [[ -f "$staging_dir/manifest" ]] || die "missing manifest in $staging_dir"
-  [[ -d "$staging_dir/binary" ]] || die "missing binary/ in $staging_dir"
   [[ -d "$staging_dir/cmd" ]] || die "missing cmd/ in $staging_dir"
 
   local manifest_file="$staging_dir/manifest"
-  local pkgname pkgver platform pica
+  local pkgname pkgver platform arch pica
   pkgname="$(manifest_get_first "$manifest_file" pkgname)"
   pkgver="$(manifest_get_first "$manifest_file" pkgver)"
   platform="$(manifest_get_first "$manifest_file" platform)"
+  arch="$(manifest_get_first "$manifest_file" arch)"
   pica="$(manifest_get_first "$manifest_file" pica)"
 
   [[ -n "$pkgname" ]] || die "manifest missing pkgname"
   [[ -n "$pkgver" ]] || die "manifest missing pkgver"
   [[ -n "$platform" ]] || die "manifest missing platform"
+  [[ -n "$arch" ]] || die "manifest missing arch"
   [[ -n "$pica" ]] || die "manifest missing pica (expected ${PICA_VERSION_DEFAULT})"
 
   local pkgfile="${pkgname}-${pkgver}-${platform}.pkg.tar.gz"
   mkdir -p "$outdir"
 
-  # Keep archive root clean: only binary/, cmd/, manifest.
-  msg "Making package: $pkgname $pkgver ($platform)"
+  # Keep archive root clean: cmd/, manifest, and optional binary/.
+  msg "Making package: $pkgname $pkgver"
+  msg2 "Platform: $platform"
+  msg2 "Arch: $arch"
   msg2 "Pica version: $pica"
   msg2 "Creating archive..."
-  tar -C "$staging_dir" -czf "$outdir/$pkgfile" manifest binary cmd
+  if [[ -d "$staging_dir/binary" ]]; then
+    tar -C "$staging_dir" -czf "$outdir/$pkgfile" manifest cmd binary
+  else
+    tar -C "$staging_dir" -czf "$outdir/$pkgfile" manifest cmd
+  fi
   msg "Finished: $outdir/$pkgfile"
   echo "$outdir/$pkgfile"
 }

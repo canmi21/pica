@@ -6,8 +6,16 @@ packager = pica-pack
 builddate = 0
 size = 0
 
-platform = openwrt-any
+platform = all
+arch = all
 pica = 0.0.1
+
+# Optional compatibility tags (recommended):
+# uname = arm64
+
+# Optional LuCI variant requirement:
+# luci = lua1
+# luci = js2
 
 # If your package needs opkg deps, list them (optional):
 depend = busybox
@@ -18,3 +26,6 @@ depend = busybox
 # Optional: if you want pica -R to delete installed /usr/bin files safely,
 # list them explicitly (relative paths under /usr/bin):
 cmd = hello
+cmd = pica-sync
+cmd = pica-update-self
+cmd = pica-remove-self

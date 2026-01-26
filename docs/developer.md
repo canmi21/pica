@@ -41,22 +41,28 @@
 
 说明：
 
-- 使用 `platform` 代替 `arch`。
+- `platform`：仅用于应用商店/仓库展示；本项目默认统一写 `all`
+- `uname`：优先用于兼容性判断；建议用 pica 口径：
+  - `amd64`（兼容 `x86_64`）
+  - `arm64`（兼容 `aarch64`）
+- `arch`：OpenWrt/opkg 定义的架构字段（推荐统一用 `all`）
+- 文件名仍以 `platform` 为主（更贴近 OpenWrt target 发布）。
+- `arch` 写入 `manifest`，用于安装时校验与展示。
 - `pkgver` 推荐形如 `1.2.3-1`（语义版本 + release）。
 
-### 包内固定结构
+### 包内结构
 
-压缩包根目录固定只有这三项：
+压缩包根目录约定：
 
 ```
 manifest
-binary/
 cmd/
+binary/   (optional)
 ```
 
 - `manifest`：包元数据（Arch-like `key = value` 文本）
-- `binary/`：可选，通常放 `.ipk` 或其他二进制资源
-- `cmd/`：可选，通常放要安装到 `/usr/bin/` 的脚本/可执行文件
+- `cmd/`：必需，安装到 `/usr/bin/` 的脚本/可执行文件
+- `binary/`：可选，通常放 `.ipk` 或其他二进制资源；纯脚本包可以没有该目录
 
 ## manifest（Arch-like 文本）
 
@@ -71,8 +77,15 @@ cmd/
 ```
 pkgname = <name>
 pkgver = <version-release>
-platform = <platform>
+platform = all
 pica = 0.0.1
+arch = all
+```
+
+可选字段：
+
+```
+uname = <uname -m>
 ```
 
 ### OpenWrt 扩展字段
@@ -81,7 +94,23 @@ pica = 0.0.1
 depend = <opkg-package>
 opkg = <opkg-package>
 cmd = <relative-file-under-/usr/bin>
+
+# optional compatibility tag
+# luci = lua1
+# luci = js2
 ```
+
+### arch（OpenWrt/opkg）
+
+`arch` 值来自 OpenWrt/opkg（可通过 `opkg print-architecture` 查看）。
+
+推荐：
+
+```
+arch = all
+```
+
+当确实需要限制设备时，可以写某个具体的 opkg arch（例如 `aarch64_cortex-a53`）。
 
 语义：
 
@@ -117,8 +146,10 @@ luci-i18n-myapp-zh-cn
 
 ```
 <staging_dir>/manifest
-<staging_dir>/binary/
 <staging_dir>/cmd/
+
+# optional
+<staging_dir>/binary/
 ```
 
 输出日志风格参考 Arch `makepkg`：
@@ -146,13 +177,14 @@ luci-i18n-myapp-zh-cn
 - `bash`
 - `jq`
 - `tar`
-- `wget`
+- 下载工具其一：`uclient-fetch`（OpenWrt 常见）/ `wget` / `curl`
 - `opkg`（仅 `-U/-R` 需要）
 
 ### 安装位置与文件
 
 - 配置目录：`/etc/pica/`
 - 配置文件：`/etc/pica/pica.json`
+- 环境变量目录（预留）：`/etc/pica/env.d/`
 - 状态目录：`/var/lib/pica/`
   - 安装数据库：`/var/lib/pica/db.json`
   - 仓库索引：`/var/lib/pica/index.json`
@@ -193,11 +225,11 @@ pica -U ./hello-0.1.0-1-openwrt-any.pkg.tar.gz
 
 行为：
 
-- 解包并校验：必须包含 `manifest/binary/cmd`
-- 校验 `pica` 协议版本一致
-- 校验 `platform`：
-  - 允许 `openwrt-any|any|all`
-  - 或者必须等于本机 `detect_platform()`（优先取 `/etc/openwrt_release` 的 `DISTRIB_TARGET`）
+ - 解包并校验：必须包含 `manifest/cmd`，`binary` 为可选
+  - 校验 `pica` 协议版本一致
+  - `platform`：仅展示，不作为安装门槛
+  - 校验 `uname`（若提供）：优先匹配（`amd64/arm64` 与 `x86_64/aarch64` 做别名兼容）
+  - 校验 `arch`：OpenWrt/opkg 架构字段，推荐 `arch = all`；若不是 all，则必须出现在 `opkg print-architecture`
 - 安装依赖：对 `depend` 逐条执行 `opkg install <name>`
 - 安装 ipk：对 `binary/*.ipk` 执行 `opkg install <file>`
 - 安装命令：将 `cmd/` 复制到 `/usr/bin/`
@@ -273,4 +305,3 @@ repo-root/
 ```
 
 当前 `pica -S` 只负责下载并缓存 `repo.json` 与写入索引；后续如果要做 `-Ss/-Si/从仓库安装`，会基于该索引扩展。
-
