@@ -1,7 +1,12 @@
-# cathelper
+# Pica 喜鹊
 
-一个开源的 opkg 增强工具，Less is more
+Pica Is a Compact Archiver
 
-提供比 istore 更多更全的插件生态
+Pica 喜鹊是一款紧凑型打包器
 
-详情见 [idea](/idea.md)
+# todo
+
+- 完成生命周期定义
+- 完成 cli
+- 完成简单封装
+- 完成标准定义
