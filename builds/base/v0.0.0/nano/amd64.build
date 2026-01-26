@@ -1,7 +1,0 @@
-#!/bin/sh
-
-NAME= nano
-VERSION=
-
-ipk url=
-depend=
