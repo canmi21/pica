@@ -119,6 +119,11 @@ license = GPL-3.0-only
 proprietary = false
 ```
 
+约定：
+
+- `builddate`：可选；Unix 时间戳（秒）。推荐不要在“源码 manifest”里手写，由 `pica-pack build` 在构建产物中自动补全。
+- `size`：可选；字节数（bytes）。推荐不要在“源码 manifest”里手写，由 `pica-pack build` 在构建产物中自动计算并补全。
+
 ### 与 OpenWrt 安装相关的扩展字段（可重复，可选）
 
 ```
@@ -251,3 +256,40 @@ LICENSE
 ```
 
 当前版本不自动安装/展开该文件，仅作为后续 `pica` 命令显示许可证内容的基础。
+
+## manifest 示例（LuCI1）
+
+```
+pkgname = luci-app-example
+pkgver = 1.0.0
+pkgrel = 1
+
+pkgdesc = Example LuCI application
+url = https://example.com
+packager = example
+builddate = 1700000000
+size = 123456
+
+arch = all
+platform = openwrt
+uname = x86_64
+
+pica = 0.0.22
+
+type = luci
+luci = lua1
+
+depend = luci-base
+depend = rpcd
+
+opkg = luci-app-example
+opkg = luci-i18n-example-zh-cn
+
+cmd = example-cli
+
+base_depend = ca-bundle
+kmod_depend = kmod-tun
+
+license = GPL-3.0-only
+proprietary = false
+```
