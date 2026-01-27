@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PICA_VERSION="0.0.1"
+PICA_VERSION="0.0.13"
 
 PICA_ETC_DIR="${PICA_ETC_DIR:-/etc/pica}"
 PICA_CONF_FILE="${PICA_CONF_FILE:-${PICA_ETC_DIR}/pica.json}"
@@ -379,13 +379,48 @@ install_pkgfile() {
   done < <(manifest_get_array "$manifest_json" depend || true)
 
   # 2) install bundled ipks in optional binary/
+  # Preferred layout (from pica-pack):
+  #   binary/<platform>/<arch>/*.ipk
+  # Fallback layout:
+  #   binary/*.ipk
   if [[ -d "$tmpdir/binary" ]]; then
+    local candidate_dirs=()
+    if [[ -d "$tmpdir/binary/$pkg_platform/$pkg_arch" ]]; then
+      candidate_dirs+=("$tmpdir/binary/$pkg_platform/$pkg_arch")
+    fi
+    if [[ -d "$tmpdir/binary/$pkg_platform/all" ]]; then
+      candidate_dirs+=("$tmpdir/binary/$pkg_platform/all")
+    fi
+    if [[ -d "$tmpdir/binary/all/$pkg_arch" ]]; then
+      candidate_dirs+=("$tmpdir/binary/all/$pkg_arch")
+    fi
+    if [[ -d "$tmpdir/binary/all/all" ]]; then
+      candidate_dirs+=("$tmpdir/binary/all/all")
+    fi
+
     local ipk
+    local installed_any=0
     shopt -s nullglob
-    for ipk in "$tmpdir/binary"/*.ipk; do
-      opkg install "$ipk" || die "opkg install ipk failed: $ipk"
-    done
+    if [[ ${#candidate_dirs[@]} -gt 0 ]]; then
+      local d
+      for d in "${candidate_dirs[@]}"; do
+        for ipk in "$d"/*.ipk; do
+          opkg install "$ipk" || die "opkg install ipk failed: $ipk"
+          installed_any=1
+        done
+      done
+    else
+      for ipk in "$tmpdir/binary"/*.ipk; do
+        opkg install "$ipk" || die "opkg install ipk failed: $ipk"
+        installed_any=1
+      done
+    fi
     shopt -u nullglob
+
+    # If binary/ exists but no ipks matched, treat as error to surface wrong layout.
+    if [[ "$installed_any" -eq 0 ]]; then
+      log_warn "no ipk files matched for platform=$pkg_platform arch=$pkg_arch"
+    fi
   fi
 
   # 3) install cmd/ payload to /usr/bin

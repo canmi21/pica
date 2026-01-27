@@ -36,7 +36,13 @@
 ### 文件名
 
 ```
-<pkgname>-<pkgver>-<platform>.pkg.tar.gz
+<pkgname>-<pkgver>-<platform>-<arch>.pkg.tar.gz
+```
+
+当 `platform = all` 时，为避免 `all-all`，文件名简化为：
+
+```
+<pkgname>-<pkgver>-<arch>.pkg.tar.gz
 ```
 
 说明：
@@ -63,6 +69,28 @@ binary/   (optional)
 - `manifest`：包元数据（Arch-like `key = value` 文本）
 - `cmd/`：必需，安装到 `/usr/bin/` 的脚本/可执行文件
 - `binary/`：可选，通常放 `.ipk` 或其他二进制资源；纯脚本包可以没有该目录
+
+`binary/` 推荐布局（多变体 ipk）：
+
+```
+binary/<platform>/<arch>/*.ipk
+```
+
+## pica-pack 输出约定
+
+默认输出目录（不传 `--outdir`）：
+
+```
+pica-pack/bin/<pkgname>/
+  <pkgname>-<pkgver>-<platform>-<arch>.pkg.tar.gz
+```
+
+当 `platform = all` 时：
+
+```
+pica-pack/bin/<pkgname>/
+  <pkgname>-<pkgver>-<arch>.pkg.tar.gz
+```
 
 ## manifest（Arch-like 文本）
 
@@ -148,8 +176,8 @@ luci-i18n-myapp-zh-cn
 <staging_dir>/manifest
 <staging_dir>/cmd/
 
-# optional
-<staging_dir>/binary/
+  # optional
+  <staging_dir>/binary/
 ```
 
 输出日志风格参考 Arch `makepkg`：
@@ -266,7 +294,7 @@ hello	0.1.0-1	openwrt-any
 repo-root/
   repo.json
   packages/
-    <pkgname>-<pkgver>-<platform>.pkg.tar.gz
+<pkgname>-<pkgver>-<platform>-<arch>.pkg.tar.gz
 ```
 
 ### /etc/pica/pica.json（建议）

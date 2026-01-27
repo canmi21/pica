@@ -2,6 +2,7 @@
 set -euo pipefail
 
 PICA_VERSION_DEFAULT="0.0.1"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 msg() {
   echo "==> $*"
@@ -18,16 +19,23 @@ Usage:
 
 staging_dir must contain:
   - manifest
-  - binary/ (can be empty)
-  - cmd/    (can be empty)
+  - cmd/
+  - binary/ is optional
+
+If binary/ exists, the recommended layout is:
+  binary/<platform>/<arch>/*.ipk
+
+When such layout is present, pica-pack will build one package per
+<platform>/<arch> combination.
 
 Package filename:
-  <pkgname>-<pkgver>-<platform>.pkg.tar.gz
+  <pkgname>-<pkgver>-<platform>-<arch>.pkg.tar.gz
 
 Manifest format (Arch-like key/value lines):
   pkgname = demo
   pkgver = 1.0.0-1
-  platform = ramips_24kec
+  platform = all
+  arch = all
   pica = 0.0.1
   (optional) pkgdesc/url/packager/builddate/size
   (repeatable) opkg/binary/cmd/depend
@@ -60,7 +68,7 @@ main_build() {
   local staging_dir="$1"
   shift
 
-  local outdir="."
+  local outdir=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --outdir)
@@ -89,28 +97,91 @@ main_build() {
   arch="$(manifest_get_first "$manifest_file" arch)"
   pica="$(manifest_get_first "$manifest_file" pica)"
 
+  platform="${platform:-all}"
+  arch="${arch:-all}"
+
   [[ -n "$pkgname" ]] || die "manifest missing pkgname"
   [[ -n "$pkgver" ]] || die "manifest missing pkgver"
-  [[ -n "$platform" ]] || die "manifest missing platform"
-  [[ -n "$arch" ]] || die "manifest missing arch"
   [[ -n "$pica" ]] || die "manifest missing pica (expected ${PICA_VERSION_DEFAULT})"
 
-  local pkgfile="${pkgname}-${pkgver}-${platform}.pkg.tar.gz"
+  if [[ -z "$outdir" ]]; then
+    outdir="$SCRIPT_DIR/bin/$pkgname"
+  fi
   mkdir -p "$outdir"
 
-  # Keep archive root clean: cmd/, manifest, and optional binary/.
-  msg "Making package: $pkgname $pkgver"
-  msg2 "Platform: $platform"
-  msg2 "Arch: $arch"
-  msg2 "Pica version: $pica"
-  msg2 "Creating archive..."
-  if [[ -d "$staging_dir/binary" ]]; then
-    tar -C "$staging_dir" -czf "$outdir/$pkgfile" manifest cmd binary
-  else
-    tar -C "$staging_dir" -czf "$outdir/$pkgfile" manifest cmd
+  local binary_dir="$staging_dir/binary"
+  local has_matrix=0
+  if [[ -d "$binary_dir" ]]; then
+    if find "$binary_dir" -mindepth 2 -maxdepth 2 -type d >/dev/null 2>&1; then
+      has_matrix=1
+    fi
   fi
-  msg "Finished: $outdir/$pkgfile"
-  echo "$outdir/$pkgfile"
+
+  build_one() {
+    local build_platform="$1"
+    local build_arch="$2"
+
+    local pkgfile
+    if [[ "$build_platform" == "all" ]]; then
+      pkgfile="${pkgname}-${pkgver}-${build_arch}.pkg.tar.gz"
+    else
+      pkgfile="${pkgname}-${pkgver}-${build_platform}-${build_arch}.pkg.tar.gz"
+    fi
+
+    (
+      local tmpdir
+      tmpdir="$(mktemp -d)"
+      trap 'rm -rf "${tmpdir:-}"' EXIT
+
+      msg "Making package: $pkgname $pkgver"
+      msg2 "Platform: $build_platform"
+      msg2 "Arch: $build_arch"
+      msg2 "Pica version: $pica"
+      msg2 "Creating archive..."
+
+      cp "$staging_dir/manifest" "$tmpdir/manifest"
+      {
+        echo "platform = $build_platform"
+        echo "arch = $build_arch"
+      } >>"$tmpdir/manifest"
+
+      mkdir -p "$tmpdir/cmd"
+      cp -a "$staging_dir/cmd/." "$tmpdir/cmd/"
+
+      if [[ -d "$binary_dir" ]]; then
+        if [[ "$has_matrix" -eq 1 ]]; then
+          local src="$binary_dir/$build_platform/$build_arch"
+          if [[ -d "$src" ]]; then
+            mkdir -p "$tmpdir/binary/$build_platform/$build_arch"
+            cp -a "$src/." "$tmpdir/binary/$build_platform/$build_arch/"
+          fi
+        else
+          mkdir -p "$tmpdir/binary"
+          cp -a "$binary_dir/." "$tmpdir/binary/"
+        fi
+      fi
+
+      if [[ -d "$tmpdir/binary" ]]; then
+        tar -C "$tmpdir" -czf "$outdir/$pkgfile" manifest cmd binary
+      else
+        tar -C "$tmpdir" -czf "$outdir/$pkgfile" manifest cmd
+      fi
+
+      msg "Finished: $outdir/$pkgfile"
+      echo "$outdir/$pkgfile"
+    )
+  }
+
+  if [[ "$has_matrix" -eq 1 ]]; then
+    local build_platform build_arch
+    while IFS= read -r build_platform; do
+      while IFS= read -r build_arch; do
+        build_one "$build_platform" "$build_arch"
+      done < <(find "$binary_dir/$build_platform" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)
+    done < <(find "$binary_dir" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)
+  else
+    build_one "$platform" "$arch"
+  fi
 }
 
 main() {

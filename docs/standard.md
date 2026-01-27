@@ -15,7 +15,13 @@
 ### 文件名
 
 ```
-<pkgname>-<pkgver>-<platform>.pkg.tar.gz
+<pkgname>-<pkgver>-<platform>-<arch>.pkg.tar.gz
+```
+
+当 `platform = all` 时，为避免出现 `all-all`，文件名可简化为：
+
+```
+<pkgname>-<pkgver>-<arch>.pkg.tar.gz
 ```
 
 说明：
@@ -35,6 +41,28 @@
 
 - `cmd/`：要安装到 `/usr/bin/` 的脚本/可执行文件。
 - `binary/`：可选，放 `.ipk` 等二进制资源；纯脚本包（exec）可以完全不提供 `binary/`。
+
+`binary/` 推荐结构（多变体）：
+
+```
+binary/<platform>/<arch>/*.ipk
+```
+
+打包器会把每个 `<platform>/<arch>` 组合单独生成一个 pica 包。
+
+## pica-pack 输出目录约定
+
+默认情况下（不传 `--outdir`），`pica-pack` 会输出到 `pica-pack/bin/<pkgname>/`：
+
+```
+pica-pack/bin/<pkgname>/<pkgname>-<pkgver>-<platform>-<arch>.pkg.tar.gz
+```
+
+当 `platform = all` 时：
+
+```
+pica-pack/bin/<pkgname>/<pkgname>-<pkgver>-<arch>.pkg.tar.gz
+```
 
 ## 兼容维度：uname + arch（platform 仅展示）
 
