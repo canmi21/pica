@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PICA_VERSION_DEFAULT="0.0.32"
+PICA_VERSION_DEFAULT="0.0.35"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 msg() {
@@ -41,7 +41,7 @@ Manifest format (Arch-like key/value lines):
   pkgver = 1.0.0-1
   platform = all
   arch = all
-  pica = 0.0.32
+  pica = 0.0.35
   (optional) pkgdesc/url/packager/size
   (repeatable) opkg/binary/cmd/depend
 EOF
@@ -67,6 +67,28 @@ manifest_get_first() {
       exit
     }
   ' "$manifest_file"
+}
+
+manifest_delete_key() {
+  local manifest_file="$1"
+  local key="$2"
+  awk -F'=' -v k="$key" '
+    $0 ~ /^[[:space:]]*#/ { print; next }
+    NF < 2 { print; next }
+    {
+      kk = $1
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", kk)
+      if (kk == k) next
+      print
+    }
+  ' "$manifest_file"
+}
+
+manifest_append_kv() {
+  local manifest_file="$1"
+  local key="$2"
+  local value="$3"
+  printf '%s = %s\n' "$key" "$value" >>"$manifest_file"
 }
 
 main_build() {
@@ -160,13 +182,27 @@ main_build() {
       msg2 "Creating archive..."
 
       # Compose final manifest for the build artifact.
-      # Source manifest should not have to include builddate/size.
-      cp "$staging_dir/manifest" "$tmpdir/manifest"
-      {
-        echo "builddate = $(date +%s)"
-        echo "platform = $build_platform"
-        echo "arch = $build_arch"
-      } >>"$tmpdir/manifest"
+      # Build output is allowed to diverge from source manifest.
+      # - Inject builddate/size
+      # - Override platform/arch
+      # - Remove old compatibility fields (no fallback logic)
+      # - Do not try to preserve /platform/arch paths in output
+      cp "$staging_dir/manifest" "$tmpdir/manifest.src"
+      manifest_delete_key "$tmpdir/manifest.src" builddate >"$tmpdir/manifest"
+      mv "$tmpdir/manifest" "$tmpdir/manifest.tmp"
+      manifest_delete_key "$tmpdir/manifest.tmp" size >"$tmpdir/manifest"
+      mv "$tmpdir/manifest" "$tmpdir/manifest.tmp"
+      manifest_delete_key "$tmpdir/manifest.tmp" platform >"$tmpdir/manifest"
+      mv "$tmpdir/manifest" "$tmpdir/manifest.tmp"
+      manifest_delete_key "$tmpdir/manifest.tmp" arch >"$tmpdir/manifest"
+      mv "$tmpdir/manifest" "$tmpdir/manifest.tmp"
+      manifest_delete_key "$tmpdir/manifest.tmp" uname >"$tmpdir/manifest"
+      rm -f "$tmpdir/manifest.tmp"
+      rm -f "$tmpdir/manifest.src"
+
+      manifest_append_kv "$tmpdir/manifest" builddate "$(date +%s)"
+      manifest_append_kv "$tmpdir/manifest" platform "$build_platform"
+      manifest_append_kv "$tmpdir/manifest" arch "$build_arch"
 
       if [[ -d "$staging_dir/cmd" ]]; then
         mkdir -p "$tmpdir/cmd"
@@ -176,10 +212,9 @@ main_build() {
       if [[ -d "$binary_dir" ]]; then
         if [[ "$has_matrix" -eq 1 ]]; then
           local src="$binary_dir/$build_platform/$build_arch"
-          if [[ -d "$src" ]]; then
-            mkdir -p "$tmpdir/binary/$build_platform/$build_arch"
-            cp -a "$src/." "$tmpdir/binary/$build_platform/$build_arch/"
-          fi
+          [[ -d "$src" ]] || die "missing binary/$build_platform/$build_arch"
+          mkdir -p "$tmpdir/binary"
+          cp -a "$src/." "$tmpdir/binary/"
         else
           mkdir -p "$tmpdir/binary"
           cp -a "$binary_dir/." "$tmpdir/binary/"
@@ -190,8 +225,8 @@ main_build() {
         if [[ "$has_matrix" -eq 1 ]]; then
           local dep_src="$depend_dir/$build_platform/$build_arch"
           if [[ -d "$dep_src" ]]; then
-            mkdir -p "$tmpdir/depend/$build_platform/$build_arch"
-            cp -a "$dep_src/." "$tmpdir/depend/$build_platform/$build_arch/"
+            mkdir -p "$tmpdir/depend"
+            cp -a "$dep_src/." "$tmpdir/depend/"
           fi
         else
           mkdir -p "$tmpdir/depend"
@@ -218,7 +253,7 @@ main_build() {
 
       local pkg_size
       pkg_size="$(wc -c <"$pkg_tmp" | tr -d '[:space:]')"
-      echo "size = $pkg_size" >>"$tmpdir/manifest"
+      manifest_append_kv "$tmpdir/manifest" size "$pkg_size"
 
       tar -C "$tmpdir" -czf "$outdir/$pkgfile" "${tar_items[@]}"
 

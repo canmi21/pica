@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PICA_VERSION="0.0.32"
+PICA_VERSION="0.0.35"
 
 PICA_ETC_DIR="${PICA_ETC_DIR:-/etc/pica}"
 PICA_CONF_FILE="${PICA_CONF_FILE:-${PICA_ETC_DIR}/pica.json}"
@@ -492,7 +492,7 @@ sync_repos() {
     log_info "$name updated"
   done
 
-  # Optional checks (OpenWrt only): verify declared base/kmod deps are available in opkg feeds.
+  # Optional checks (OpenWrt only): verify declared deps are available in opkg feeds.
   if command -v opkg >/dev/null 2>&1; then
     opkg update >/dev/null 2>&1 || true
     local missing_any=0
@@ -508,12 +508,13 @@ sync_repos() {
         | to_entries
         | .[]
         | .value.data.packages[]?
-        | (.manifest.base_depend? // empty | if type=="array" then .[] else . end),
-          (.manifest.kmod_depend? // empty | if type=="array" then .[] else . end)
+        | (.manifest.base? // empty | if type=="array" then .[] else . end),
+          (.manifest.kmod? // empty | if type=="array" then .[] else . end),
+          (.manifest.app? // empty | if type=="array" then .[] else . end)
       ' "$PICA_INDEX_FILE" 2>/dev/null || true
     )
     if [[ "$missing_any" -ne 0 ]]; then
-      log_warn "Some base/kmod dependencies are missing in opkg feeds"
+      log_warn "Some declared dependencies are missing in opkg feeds"
     fi
   fi
 }
@@ -789,21 +790,34 @@ install_pkgfile() {
   # Mark this as a pica-installed package for auto update selection.
   manifest_json="$(jq --arg source "pica" '.source //= $source' <<<"$manifest_json")"
 
-  # base_depend: optional baseline, warn only.
-  while IFS= read -r dep; do
-    [[ -z "$dep" ]] && continue
-    if ! opkg_is_installed "$dep"; then
-      log_warn "missing base dependency (not fatal): $dep"
+  resolve_lang() {
+    local lang=""
+    lang="$(jq -r '.lang // empty' "$PICA_CONF_FILE" 2>/dev/null || true)"
+    if [[ -z "$lang" ]]; then
+      lang="zh-cn"
     fi
-  done < <(manifest_get_array "$manifest_json" base_depend || true)
+    echo "$lang"
+  }
 
-  # kmod_depend: hard requirement.
-  while IFS= read -r dep; do
-    [[ -z "$dep" ]] && continue
-    if ! opkg_is_installed "$dep"; then
-      die "missing kmod dependency (install via opkg first): $dep"
-    fi
-  done < <(manifest_get_array "$manifest_json" kmod_depend || true)
+  expand_lang_template() {
+    local template="$1"
+    local lang="$2"
+    echo "${template//\{lang\}/$lang}"
+  }
+
+  # kmod: hard requirement. Must be installable.
+  local kmod_list
+  kmod_list="$(manifest_get_array "$manifest_json" kmod || true)"
+  if [[ -n "$kmod_list" ]]; then
+    opkg update >/dev/null 2>&1 || true
+    local dep
+    while IFS= read -r dep; do
+      [[ -z "$dep" ]] && continue
+      if ! opkg_is_installed "$dep"; then
+        opkg install "$dep" || die "kmod dependency not installable: $dep"
+      fi
+    done <<<"$kmod_list"
+  fi
 
   install_ipk_dir() {
     local label="$1"
@@ -823,19 +837,20 @@ install_pkgfile() {
     fi
   }
 
-  # Decide how to satisfy base deps:
-  # - If depend/ exists and all depend= packages are available in opkg feeds, ask.
-  # - If depend/ exists and only some depend= packages are available, ask.
-  # - If depend/ does not exist, use opkg depend= only.
-  local has_depend_dir=0
-  if [[ -d "$tmpdir/depend" ]]; then
-    has_depend_dir=1
-  fi
-  local depend_list
-  depend_list="$(manifest_get_array "$manifest_json" depend || true)"
+  should_use_feeds() {
+    local label="$1"
+    local pkg_list="$2"
+    local have_ipk_dir="$3"
 
-  local use_opkg_deps=0
-  if [[ "$has_depend_dir" -eq 1 && -n "$depend_list" ]]; then
+    if [[ "$have_ipk_dir" -eq 0 ]]; then
+      echo 1
+      return 0
+    fi
+    if [[ -z "$pkg_list" ]]; then
+      echo 0
+      return 0
+    fi
+
     opkg update >/dev/null 2>&1 || true
     local total=0
     local available=0
@@ -846,34 +861,64 @@ install_pkgfile() {
       if opkg_has_package "$dep"; then
         available=$((available + 1))
       fi
-    done <<<"$depend_list"
+    done <<<"$pkg_list"
 
-    if [[ "$available" -gt 0 ]]; then
-      if prompt_yn "Found $available/$total dependencies in opkg feeds. Use opkg instead of packaged depend/?" 1; then
-        use_opkg_deps=1
-      fi
+    if [[ "$available" -eq 0 ]]; then
+      echo 0
+      return 0
     fi
-  fi
 
-  if [[ "$use_opkg_deps" -eq 1 ]]; then
-    while IFS= read -r dep; do
-      [[ -z "$dep" ]] && continue
-      opkg install "$dep" || die "opkg install depend failed: $dep"
-    done <<<"$depend_list"
-  else
-    if [[ "$has_depend_dir" -eq 1 ]]; then
-      install_ipk_dir "depend" "$tmpdir/depend"
+    if prompt_yn "Found $available/$total $label packages in opkg feeds. Use feeds instead of packaged ipks?" 1; then
+      echo 1
     else
+      echo 0
+    fi
+  }
+
+  install_via_feeds_or_ipk() {
+    local label="$1"
+    local pkg_list="$2"
+    local ipk_dir="$3"
+    local have_ipk_dir="$4"
+
+    local use_feeds
+    use_feeds="$(should_use_feeds "$label" "$pkg_list" "$have_ipk_dir")"
+    if [[ "$use_feeds" -eq 1 ]]; then
+      [[ -n "$pkg_list" ]] || die "$label packages not defined in manifest"
+      local dep
       while IFS= read -r dep; do
         [[ -z "$dep" ]] && continue
-        opkg update >/dev/null 2>&1 || true
-        opkg install "$dep" || die "opkg install depend failed: $dep"
-      done <<<"$depend_list"
+        opkg install "$dep" || die "opkg install failed ($label): $dep"
+      done <<<"$pkg_list"
+      return 0
     fi
-  fi
 
-  # Install app ipks from binary/ (new rule: pica-pack already matched platform/arch).
-  install_ipk_dir "binary" "$tmpdir/binary"
+    if [[ "$have_ipk_dir" -eq 1 ]]; then
+      install_ipk_dir "$label" "$ipk_dir"
+      return 0
+    fi
+    die "$label not available in feeds and no packaged ipks provided"
+  }
+
+  # base: must be available via feeds or packaged depend/.
+  local base_list
+  base_list="$(manifest_get_array "$manifest_json" base || true)"
+  local has_depend_dir=0
+  [[ -d "$tmpdir/depend" ]] && has_depend_dir=1
+  install_via_feeds_or_ipk "base" "$base_list" "$tmpdir/depend" "$has_depend_dir"
+
+  # app: must be available via feeds or packaged binary/.
+  local app_list
+  app_list="$(manifest_get_array "$manifest_json" app || true)"
+  local lang
+  lang="$(resolve_lang)"
+  local i18n_template
+  i18n_template="$(manifest_get_first "$manifest_json" app_i18n)"
+  if [[ -n "$i18n_template" ]]; then
+    app_list+=$'\n'
+    app_list+="$(expand_lang_template "$i18n_template" "$lang")"
+  fi
+  install_via_feeds_or_ipk "app" "$app_list" "$tmpdir/binary" 1
 
   # lifecycle cmd scripts
   if [[ "$is_upgrade" -eq 1 ]]; then

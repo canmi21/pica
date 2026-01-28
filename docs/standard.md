@@ -101,7 +101,7 @@ arch = all
 pica = <min pica-cli version>
 ```
 
-### 最新推荐字段模板（0.0.32）
+### 最新推荐字段模板（0.0.35）
 
 ```ini
 # Required
@@ -109,7 +109,7 @@ pkgname = hello
 pkgver = 0.1.0-1
 platform = all
 arch = all
-pica = 0.0.32
+pica = 0.0.35
 
 # Optional metadata
 pkgdesc = Example lifecycle package
@@ -126,18 +126,15 @@ proprietary = false
 # type = luci
 # luci = lua1
 
+# Install plan
+app = hello
+app_i18n = luci-i18n-hello-{lang}
+base = busybox
+# kmod = kmod-tun
+
 # Optional: uninstall whitelist (repeatable)
-# opkg = luci-app-hello
-
-# Optional: base dependencies (missing => warn only)
-# base_depend = busybox
-
-# Optional: kernel module dependencies (missing => reject install)
-# kmod_depend = kmod-tun
-
-# Optional: if depend/ exists and opkg feeds match all/part of these,
-# pica will ask whether to use feeds or packaged depend/.
-depend = busybox
+opkg = hello
+opkg = luci-i18n-hello-{lang}
 
 # Lifecycle scripts (optional)
 cmd_install = cmd/install
@@ -181,18 +178,19 @@ proprietary = false
 ```
 opkg = <opkg package name>
 
-# optional: if you want pica to optionally install deps via opkg feeds,
-# list the opkg package names here.
-depend = <opkg package name>
+# Install plan (repeatable)
+app = <opkg package name>
+base = <opkg package name>
+kmod = <opkg package name>
+
+# Optional: i18n template for app packages
+# The {lang} placeholder is resolved from pica config (default: zh-cn).
+app_i18n = <opkg package name template>
 
 # lifecycle cmd scripts (optional)
 cmd_install = <relative file>
 cmd_update = <relative file>
 cmd_remove = <relative file>
-
-# special deps (repeatable)
-base_depend = <opkg package name>
-kmod_depend = <opkg package name>
 
 # optional type tags (repeatable)
 type = cli
@@ -204,23 +202,14 @@ luci = lua1
 
 约定：
 
+- `app/base/kmod` 定义“安装清单”，pica 安装时必须遍历这些字段来决定需要安装的 opkg 包。
+- `app_i18n` 允许包含 `{lang}` 占位符，pica 根据配置语言选择实际 i18n 包名。
+- `opkg` 用于卸载白名单（仅卸载你显式列出的包）。
+- `cmd_install/cmd_update/cmd_remove` 是生命周期脚本（包内路径，一般在 `cmd/` 下）。
+
 - `type` 允许声明应用形态标签，便于 pica 在安装阶段做额外兼容检查。
 - `type = luci` 表示“该包包含/依赖 LuCI Web UI”。如果声明了 `type = luci`，必须同时声明 `luci = lua1|js2`。
-- `type = cli` 表示“该包提供纯命令行程序/脚本”。目前 `type = cli` 主要用于元数据标注，pica-cli 不会因为缺少 LuCI 而拒绝安装；需要 LuCI 的包请务必使用 `type = luci` 明确标注。
-
-- `depend`：基础依赖的“软件源候选项”（安装阶段可选择 `opkg install`；不做依赖树管理）。
-- `opkg`：卸载阶段 `opkg remove` 的包名（仅卸载你显式列出的包）。
-- `cmd_install`：安装生命周期脚本（在 `binary/` ipk 安装完成后执行；0 为成功）。
-- `cmd_update`：更新生命周期脚本（当检测到是升级路径时执行；0 为成功）。
-- `cmd_remove`：卸载生命周期脚本（在 `opkg remove` 前执行；0 为成功）。
-- `base_depend`：基础依赖（允许缺失；若缺失则告警并继续，或由 depend/ 与 ipk 依赖关系补全）。
-- `kmod_depend`：kmod 依赖（必须已安装；缺失则拒绝安装）。
-
-说明：
-
-- `depend` 是“从软件源安装基础依赖”的候选列表；是否使用软件源由交互决定。
-- `base_depend` 是“建议存在的基础条件”（允许缺失）。
-- `kmod_depend` 是“必须满足的内核模块条件”（不满足则拒绝安装）。
+- `type = cli` 表示“该包提供纯命令行程序/脚本”。
 
 ## arch（OpenWrt/opkg）
 
@@ -334,21 +323,21 @@ arch = all
 platform = openwrt
 uname = x86_64
 
-  pica = 0.0.32
+  pica = 0.0.35
 
 type = luci
 luci = lua1
 
-depend = luci-base
-depend = rpcd
+base = luci-base
+base = rpcd
 
 opkg = luci-app-example
 opkg = luci-i18n-example-zh-cn
 
 cmd = example-cli
 
-base_depend = ca-bundle
-kmod_depend = kmod-tun
+base = ca-bundle
+kmod = kmod-tun
 
 license = GPL-3.0-only
 proprietary = false
