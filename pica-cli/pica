@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PICA_VERSION="0.0.3"
+PICA_VERSION="0.0.32"
 
 PICA_ETC_DIR="${PICA_ETC_DIR:-/etc/pica}"
 PICA_CONF_FILE="${PICA_CONF_FILE:-${PICA_ETC_DIR}/pica.json}"
@@ -690,6 +690,7 @@ install_pkgfile() {
   tar -xzf "$pkgfile" -C "$tmpdir"
   [[ -f "$tmpdir/manifest" ]] || die "package missing manifest"
   [[ -d "$tmpdir/cmd" ]] || die "package missing cmd/"
+  [[ -d "$tmpdir/binary" ]] || die "package missing binary/"
 
   local manifest_json pkgname pica
   manifest_json="$(manifest_to_json "$tmpdir/manifest")"
@@ -788,14 +789,15 @@ install_pkgfile() {
   # Mark this as a pica-installed package for auto update selection.
   manifest_json="$(jq --arg source "pica" '.source //= $source' <<<"$manifest_json")"
 
-  # base/kmod depends are special: must already be installed.
-  # They are checked but not auto-installed (different from depend=).
+  # base_depend: optional baseline, warn only.
   while IFS= read -r dep; do
     [[ -z "$dep" ]] && continue
     if ! opkg_is_installed "$dep"; then
-      die "missing base dependency (install via opkg first): $dep"
+      log_warn "missing base dependency (not fatal): $dep"
     fi
   done < <(manifest_get_array "$manifest_json" base_depend || true)
+
+  # kmod_depend: hard requirement.
   while IFS= read -r dep; do
     [[ -z "$dep" ]] && continue
     if ! opkg_is_installed "$dep"; then
@@ -803,57 +805,75 @@ install_pkgfile() {
     fi
   done < <(manifest_get_array "$manifest_json" kmod_depend || true)
 
-  # 1) install opkg deps (best-effort, no dependency tracking)
-  while IFS= read -r dep; do
-    [[ -z "$dep" ]] && continue
-    opkg update >/dev/null 2>&1 || true
-    opkg install "$dep" || die "opkg install depend failed: $dep"
-  done < <(manifest_get_array "$manifest_json" depend || true)
-
-  # 2) install bundled ipks in optional binary/
-  # Preferred layout (from pica-pack):
-  #   binary/<platform>/<arch>/*.ipk
-  # Fallback layout:
-  #   binary/*.ipk
-  if [[ -d "$tmpdir/binary" ]]; then
-    local candidate_dirs=()
-    if [[ -d "$tmpdir/binary/$pkg_platform/$pkg_arch" ]]; then
-      candidate_dirs+=("$tmpdir/binary/$pkg_platform/$pkg_arch")
-    fi
-    if [[ -d "$tmpdir/binary/$pkg_platform/all" ]]; then
-      candidate_dirs+=("$tmpdir/binary/$pkg_platform/all")
-    fi
-    if [[ -d "$tmpdir/binary/all/$pkg_arch" ]]; then
-      candidate_dirs+=("$tmpdir/binary/all/$pkg_arch")
-    fi
-    if [[ -d "$tmpdir/binary/all/all" ]]; then
-      candidate_dirs+=("$tmpdir/binary/all/all")
-    fi
+  install_ipk_dir() {
+    local label="$1"
+    local dir="$2"
+    [[ -d "$dir" ]] || return 0
 
     local ipk
     local installed_any=0
     shopt -s nullglob
-    if [[ ${#candidate_dirs[@]} -gt 0 ]]; then
-      local d
-      for d in "${candidate_dirs[@]}"; do
-        for ipk in "$d"/*.ipk; do
-          opkg install "$ipk" || die "opkg install ipk failed: $ipk"
-          installed_any=1
-        done
-      done
-    else
-      for ipk in "$tmpdir/binary"/*.ipk; do
-        opkg install "$ipk" || die "opkg install ipk failed: $ipk"
-        installed_any=1
-      done
-    fi
+    for ipk in "$dir"/*.ipk; do
+      opkg install "$ipk" || die "opkg install ipk failed ($label): $ipk"
+      installed_any=1
+    done
     shopt -u nullglob
-
-    # If binary/ exists but no ipks matched, treat as error to surface wrong layout.
     if [[ "$installed_any" -eq 0 ]]; then
-      log_warn "no ipk files matched for platform=$pkg_platform arch=$pkg_arch"
+      die "no ipk files found in $label dir: $dir"
+    fi
+  }
+
+  # Decide how to satisfy base deps:
+  # - If depend/ exists and all depend= packages are available in opkg feeds, ask.
+  # - If depend/ exists and only some depend= packages are available, ask.
+  # - If depend/ does not exist, use opkg depend= only.
+  local has_depend_dir=0
+  if [[ -d "$tmpdir/depend" ]]; then
+    has_depend_dir=1
+  fi
+  local depend_list
+  depend_list="$(manifest_get_array "$manifest_json" depend || true)"
+
+  local use_opkg_deps=0
+  if [[ "$has_depend_dir" -eq 1 && -n "$depend_list" ]]; then
+    opkg update >/dev/null 2>&1 || true
+    local total=0
+    local available=0
+    local dep
+    while IFS= read -r dep; do
+      [[ -z "$dep" ]] && continue
+      total=$((total + 1))
+      if opkg_has_package "$dep"; then
+        available=$((available + 1))
+      fi
+    done <<<"$depend_list"
+
+    if [[ "$available" -gt 0 ]]; then
+      if prompt_yn "Found $available/$total dependencies in opkg feeds. Use opkg instead of packaged depend/?" 1; then
+        use_opkg_deps=1
+      fi
     fi
   fi
+
+  if [[ "$use_opkg_deps" -eq 1 ]]; then
+    while IFS= read -r dep; do
+      [[ -z "$dep" ]] && continue
+      opkg install "$dep" || die "opkg install depend failed: $dep"
+    done <<<"$depend_list"
+  else
+    if [[ "$has_depend_dir" -eq 1 ]]; then
+      install_ipk_dir "depend" "$tmpdir/depend"
+    else
+      while IFS= read -r dep; do
+        [[ -z "$dep" ]] && continue
+        opkg update >/dev/null 2>&1 || true
+        opkg install "$dep" || die "opkg install depend failed: $dep"
+      done <<<"$depend_list"
+    fi
+  fi
+
+  # Install app ipks from binary/ (new rule: pica-pack already matched platform/arch).
+  install_ipk_dir "binary" "$tmpdir/binary"
 
   # lifecycle cmd scripts
   if [[ "$is_upgrade" -eq 1 ]]; then

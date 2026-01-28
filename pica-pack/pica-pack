@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PICA_VERSION_DEFAULT="0.0.3"
+PICA_VERSION_DEFAULT="0.0.32"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 msg() {
@@ -21,10 +21,14 @@ staging_dir must contain:
   - manifest
   - cmd/
   - binary/ is optional
+  - depend/ is optional
   - LICENSE is optional
 
 If binary/ exists, the recommended layout is:
   binary/<platform>/<arch>/*.ipk
+
+If depend/ exists, the recommended layout is:
+  depend/<platform>/<arch>/*.ipk
 
 When such layout is present, pica-pack will build one package per
 <platform>/<arch> combination.
@@ -37,7 +41,7 @@ Manifest format (Arch-like key/value lines):
   pkgver = 1.0.0-1
   platform = all
   arch = all
-  pica = 0.0.3
+  pica = 0.0.32
   (optional) pkgdesc/url/packager/size
   (repeatable) opkg/binary/cmd/depend
 EOF
@@ -116,9 +120,15 @@ main_build() {
   mkdir -p "$outdir"
 
   local binary_dir="$staging_dir/binary"
+  local depend_dir="$staging_dir/depend"
   local has_matrix=0
   if [[ -d "$binary_dir" ]]; then
     if find "$binary_dir" -mindepth 2 -maxdepth 2 -type d >/dev/null 2>&1; then
+      has_matrix=1
+    fi
+  fi
+  if [[ "$has_matrix" -eq 0 && -d "$depend_dir" ]]; then
+    if find "$depend_dir" -mindepth 2 -maxdepth 2 -type d >/dev/null 2>&1; then
       has_matrix=1
     fi
   fi
@@ -176,6 +186,19 @@ main_build() {
         fi
       fi
 
+      if [[ -d "$depend_dir" ]]; then
+        if [[ "$has_matrix" -eq 1 ]]; then
+          local dep_src="$depend_dir/$build_platform/$build_arch"
+          if [[ -d "$dep_src" ]]; then
+            mkdir -p "$tmpdir/depend/$build_platform/$build_arch"
+            cp -a "$dep_src/." "$tmpdir/depend/$build_platform/$build_arch/"
+          fi
+        else
+          mkdir -p "$tmpdir/depend"
+          cp -a "$depend_dir/." "$tmpdir/depend/"
+        fi
+      fi
+
     if [[ -f "$staging_dir/LICENSE" ]]; then
       cp "$staging_dir/LICENSE" "$tmpdir/LICENSE"
     fi
@@ -187,37 +210,17 @@ main_build() {
 
       # cmd/ is the only lifecycle/script payload directory.
 
-      if [[ -d "$tmpdir/binary" ]]; then
-        if [[ -f "$tmpdir/LICENSE" ]]; then
-          tar -C "$tmpdir" -czf "$pkg_tmp" manifest cmd binary LICENSE
-        else
-          tar -C "$tmpdir" -czf "$pkg_tmp" manifest cmd binary
-        fi
-      else
-        if [[ -f "$tmpdir/LICENSE" ]]; then
-          tar -C "$tmpdir" -czf "$pkg_tmp" manifest cmd LICENSE
-        else
-          tar -C "$tmpdir" -czf "$pkg_tmp" manifest cmd
-        fi
-      fi
+      local tar_items=(manifest cmd)
+      [[ -d "$tmpdir/binary" ]] && tar_items+=(binary)
+      [[ -d "$tmpdir/depend" ]] && tar_items+=(depend)
+      [[ -f "$tmpdir/LICENSE" ]] && tar_items+=(LICENSE)
+      tar -C "$tmpdir" -czf "$pkg_tmp" "${tar_items[@]}"
 
       local pkg_size
       pkg_size="$(wc -c <"$pkg_tmp" | tr -d '[:space:]')"
       echo "size = $pkg_size" >>"$tmpdir/manifest"
 
-      if [[ -d "$tmpdir/binary" ]]; then
-        if [[ -f "$tmpdir/LICENSE" ]]; then
-          tar -C "$tmpdir" -czf "$outdir/$pkgfile" manifest cmd binary LICENSE
-        else
-          tar -C "$tmpdir" -czf "$outdir/$pkgfile" manifest cmd binary
-        fi
-      else
-        if [[ -f "$tmpdir/LICENSE" ]]; then
-          tar -C "$tmpdir" -czf "$outdir/$pkgfile" manifest cmd LICENSE
-        else
-          tar -C "$tmpdir" -czf "$outdir/$pkgfile" manifest cmd
-        fi
-      fi
+      tar -C "$tmpdir" -czf "$outdir/$pkgfile" "${tar_items[@]}"
 
       msg "Finished: $outdir/$pkgfile"
       echo "$outdir/$pkgfile"
@@ -226,11 +229,25 @@ main_build() {
 
   if [[ "$has_matrix" -eq 1 ]]; then
     local build_platform build_arch
+    local roots=()
+    [[ -d "$binary_dir" ]] && roots+=("$binary_dir")
+    [[ -d "$depend_dir" ]] && roots+=("$depend_dir")
+    [[ ${#roots[@]} -gt 0 ]] || die "matrix layout detected but neither binary/ nor depend/ exists"
+
     while IFS= read -r build_platform; do
       while IFS= read -r build_arch; do
         build_one "$build_platform" "$build_arch"
-      done < <(find "$binary_dir/$build_platform" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)
-    done < <(find "$binary_dir" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)
+      done < <(
+        for r in "${roots[@]}"; do
+          [[ -d "$r/$build_platform" ]] || continue
+          find "$r/$build_platform" -mindepth 1 -maxdepth 1 -type d -printf '%f\n'
+        done | sort -u
+      )
+    done < <(
+      for r in "${roots[@]}"; do
+        find "$r" -mindepth 1 -maxdepth 1 -type d -printf '%f\n'
+      done | sort -u
+    )
   else
     build_one "$platform" "$arch"
   fi

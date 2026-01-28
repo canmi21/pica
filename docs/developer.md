@@ -27,7 +27,7 @@
 
 ## 版本约定
 
-- `pica-cli` 内置协议版本：`PICA_VERSION=0.0.3`
+- `pica-cli` 内置协议版本：`PICA_VERSION=0.0.32`
 - `manifest` 的 `pica` 字段表示最低兼容版本：`pica = <min pica-cli version>`（可选，不写不检查）
 - `pica -U` 安装时会校验 `manifest` 的 `pica` 与 CLI 是否一致；不一致直接失败（非 0 退出）。
 
@@ -192,7 +192,7 @@ luci-i18n-myapp-zh-cn
 
 ```
 ==> Making package: hello 0.1.0-1 (openwrt-any)
-  -> Pica version: 0.0.3
+  -> Pica version: 0.0.32
   -> Creating archive...
 ==> Finished: /tmp/pica-test/hello-0.1.0-1-openwrt-any.pkg.tar.gz
 ```
@@ -267,13 +267,15 @@ pica -Syu
 
 行为：
 
- - 解包并校验：必须包含 `manifest/cmd`，`binary` 为可选
+- 解包并校验：必须包含 `manifest/cmd/binary`，`depend` 为可选
   - 校验 `pica` 协议版本一致
   - `platform`：仅展示，不作为安装门槛
   - 校验 `uname`（若提供）：优先匹配（`amd64/arm64` 与 `x86_64/aarch64` 做别名兼容）
   - 校验 `arch`：OpenWrt/opkg 架构字段，推荐 `arch = all`；若不是 all，则必须出现在 `opkg print-architecture`
-- 安装依赖：对 `depend` 逐条执行 `opkg install <name>`
-- 安装 ipk：对 `binary/*.ipk` 执行 `opkg install <file>`
+- 安装基础依赖（两种方式二选一）：
+  - 软件源：对 `depend` 逐条执行 `opkg install <name>`
+  - 封装依赖：对 `depend/*.ipk` 执行 `opkg install <file>`
+- 安装应用包：对 `binary/*.ipk` 执行 `opkg install <file>`
 - 安装命令：将 `cmd/` 复制到 `/usr/bin/`
 - 写入本地安装数据库：`/var/lib/pica/db.json`
 
@@ -337,7 +339,7 @@ repo-root/
       "pkgname": "hello",
       "pkgver": "0.1.0-1",
       "platform": "openwrt-any",
-      "pica": "0.0.3",
+      "pica": "0.0.32",
       "filename": "hello-0.1.0-1-openwrt-any.pkg.tar.gz",
       "md5": "<md5>",
       "size": 465

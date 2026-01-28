@@ -8,7 +8,7 @@ proprietary = false
 
 platform = all
 arch = all
-pica = 0.0.3
+pica = 0.0.32
 
 # Optional compatibility tags (recommended):
 # uname = arm64
@@ -21,17 +21,22 @@ pica = 0.0.3
 # luci = lua1
 # luci = js2
 
-# If your package needs opkg deps, list them (optional):
+# Optional: base dependencies (can be missing; pica warns only)
+# base_depend = busybox
+
+# Optional: kernel module dependencies (missing => install is rejected)
+# kmod_depend = kmod-tun
+
+# Optional: if you want pica to optionally install deps via opkg feeds,
+# list them here. When depend/ exists and feeds match all/part of them,
+# pica will ask whether to use feeds or packaged depend/.
 depend = busybox
 
-# If you bundle opkg ipks in binary/, list them here (optional):
+# Optional: list opkg packages for uninstall whitelist:
 # opkg = luci
 
 # Optional: if you want pica -R to delete installed /usr/bin files safely,
 # list them explicitly (relative paths under /usr/bin):
-cmd = pica-sync
-cmd = pica-update
-cmd = pica-remove
 
 cmd_install = cmd/install
 cmd_update = cmd/update
