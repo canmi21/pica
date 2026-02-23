@@ -1,7 +1,7 @@
 use crate::{
-    ensure_dirs, manifest_get_first, pkgver_cmp_key, read_json_file, App, CliError, CliResult,
-    DEFAULT_ERROR_CODE,
+    ensure_dirs, manifest_get_first, pkgver_cmp_key, App, CliError, CliResult, DEFAULT_ERROR_CODE,
 };
+use crate::state::read_json_file;
 use serde_json::Value;
 
 pub fn query_installed(app: &mut App) -> CliResult<()> {

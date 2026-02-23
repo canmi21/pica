@@ -1,8 +1,8 @@
 use crate::{
-    detect_platform, ensure_dirs, ensure_json_object_field, fetch_url, has_command, opkg_has_package,
-    opkg_update_ignore, read_json_file, write_json_atomic_pretty, App, CliError, CliResult,
-    DEFAULT_ERROR_CODE,
+    detect_platform, ensure_dirs, App, CliError, CliResult, DEFAULT_ERROR_CODE,
 };
+use crate::state::{ensure_json_object_field, read_json_file, write_json_atomic_pretty};
+use crate::system::{fetch_url, has_command, opkg_has_package, opkg_update_ignore};
 use pica_core::repo::parse_repo_json;
 use serde_json::{json, Value};
 
@@ -66,7 +66,7 @@ pub fn sync_repos(app: &mut App) -> CliResult<()> {
 
         app.log_info(format!("{name} downloading..."));
         let repo_json_url = format!("{}/repo.json", url.trim_end_matches('/'));
-        let repo_raw = fetch_url(&repo_json_url)?;
+        let repo_raw = fetch_url(&repo_json_url, crate::is_supported_url)?;
         let repo_text = String::from_utf8(repo_raw).map_err(|_| {
             CliError::new(
                 "E_REPO_INVALID",

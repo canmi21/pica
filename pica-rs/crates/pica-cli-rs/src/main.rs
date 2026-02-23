@@ -1,18 +1,21 @@
 mod lock;
 mod commands;
 mod types;
+mod state;
+mod system;
 
 use crate::types::{
     ensure_dirs, parse_options, require_arg, App, CliError, CliResult, FeedPolicy, JsonMode,
     Options, Paths, DEFAULT_ERROR_CODE,
 };
+use crate::state::read_json_file;
 use pica_core::manifest::{get_first as manifest_get_first, Manifest};
 use pica_core::repo::is_supported_url;
 use pica_core::selector::Selector;
 use pica_core::version::{pkgver_cmp_key, pkgver_ge, ver_ge};
 use pica_core::PICA_VERSION;
 use pica_core::io::{copy_dir_recursive as core_copy_dir_recursive, make_temp_dir as core_make_temp_dir};
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 use std::env;
 use std::ffi::OsString;
 use std::fs;
@@ -383,34 +386,7 @@ fn detect_luci_variant() -> String {
 }
 
 fn opkg_is_installed(name: &str) -> bool {
-    let Ok(output) = Command::new("opkg").arg("status").arg(name).output() else {
-        return false;
-    };
-
-    let text = String::from_utf8_lossy(&output.stdout).to_ascii_lowercase();
-    text.contains("status:") && text.contains("installed")
-}
-
-fn opkg_snapshot_installed() -> Vec<String> {
-    let Ok(output) = Command::new("opkg").arg("list-installed").output() else {
-        return Vec::new();
-    };
-
-    let text = String::from_utf8_lossy(&output.stdout);
-    let mut out = Vec::new();
-    for line in text.lines() {
-        let Some((name, _)) = line.split_once(" - ") else {
-            continue;
-        };
-        let trimmed = name.trim();
-        if !trimmed.is_empty() {
-            out.push(trimmed.to_string());
-        }
-    }
-
-    out.sort();
-    out.dedup();
-    out
+    system::opkg_is_installed(name)
 }
 
 fn pkg_list_diff_added(before: &[String], after: &[String]) -> Vec<String> {
@@ -747,163 +723,6 @@ fn run_hook(app: &mut App, tmpdir: &Path, hook_rel: &str, label: &str) -> CliRes
     run_command_capture_output("bash", &[hook_path.to_string_lossy().as_ref()]).map(|_| ())
 }
 
-fn report_set_install_result(
-    app: &mut App,
-    pkgname: &str,
-    selector: &str,
-    manifest: &Value,
-    precheck: &Value,
-    tx_added: &[String],
-    app_added: &[String],
-) -> CliResult<()> {
-    ensure_dirs(&app.paths)?;
-
-    let mut report = read_json_file(&app.paths.report_file).unwrap_or_else(|_| {
-        json!({
-            "schema": 1,
-            "reports": {},
-        })
-    });
-
-    report["schema"] = json!(1);
-    ensure_json_object_field(&mut report, "reports")?;
-
-    let appname = manifest_get_first(manifest, "appname");
-    let appname = if appname.is_empty() {
-        manifest_get_first(manifest, "pkgname")
-    } else {
-        appname
-    };
-
-    report["reports"][pkgname] = json!({
-        "updated_at": now_unix_secs(),
-        "selector": selector,
-        "package": {
-            "pkgname": manifest_get_first(manifest, "pkgname"),
-            "appname": appname,
-            "author": manifest_get_first(manifest, "author"),
-            "version": manifest_get_first(manifest, "version"),
-            "branch": manifest_get_first(manifest, "branch"),
-            "protocol": manifest_get_first(manifest, "protocol"),
-            "pkgver": manifest_get_first(manifest, "pkgver"),
-            "pkgrel": manifest_get_first(manifest, "pkgrel"),
-        },
-        "precheck": precheck,
-        "dependency_diff": {
-            "transaction_added": tx_added,
-            "app_stage_added": app_added,
-        }
-    });
-
-    write_json_atomic_pretty(&app.paths.report_file, &report)
-}
-
-fn db_set_installed(
-    db_file: &Path,
-    pkgname: &str,
-    manifest: Value,
-    pkgfile: &str,
-) -> CliResult<()> {
-    let mut db = read_json_file(db_file)?;
-    ensure_json_object_field(&mut db, "installed")?;
-
-    let installed = db
-        .get_mut("installed")
-        .and_then(Value::as_object_mut)
-        .ok_or_else(|| CliError::new("E_DB_INVALID", "db installed is not object"))?;
-
-    installed.insert(
-        pkgname.to_string(),
-        json!({
-            "manifest": manifest,
-            "pkgfile": pkgfile,
-            "installed_at": now_unix_secs(),
-        }),
-    );
-
-    write_json_atomic_pretty(db_file, &db)
-}
-
-fn db_del_installed(db_file: &Path, pkgname: &str) -> CliResult<()> {
-    let mut db = read_json_file(db_file)?;
-    ensure_json_object_field(&mut db, "installed")?;
-
-    let installed = db
-        .get_mut("installed")
-        .and_then(Value::as_object_mut)
-        .ok_or_else(|| CliError::new("E_DB_INVALID", "db installed is not object"))?;
-    installed.remove(pkgname);
-
-    write_json_atomic_pretty(db_file, &db)
-}
-
-fn now_unix_secs() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_secs())
-        .unwrap_or(0)
-}
-
-fn db_has_installed(db_file: &Path, pkgname: &str) -> CliResult<bool> {
-    let db = read_json_file(db_file)?;
-    let has = db
-        .get("installed")
-        .and_then(Value::as_object)
-        .map(|installed| installed.contains_key(pkgname))
-        .unwrap_or(false);
-    Ok(has)
-}
-
-fn db_find_installed_pkgname_by_selector(
-    db_file: &Path,
-    selector: &Selector,
-) -> CliResult<Option<String>> {
-    let db = read_json_file(db_file)?;
-    let Some(installed) = db.get("installed").and_then(Value::as_object) else {
-        return Ok(None);
-    };
-
-    for (pkgname, entry) in installed {
-        let manifest = entry.get("manifest").unwrap_or(&Value::Null);
-
-        let key_matches = pkgname == &selector.appname
-            || manifest_get_first(manifest, "appname") == selector.appname
-            || manifest_get_first(manifest, "pkgname") == selector.appname;
-        if !key_matches {
-            continue;
-        }
-
-        if !selector.author.is_empty() && manifest_get_first(manifest, "author") != selector.author
-        {
-            continue;
-        }
-
-        if !selector.version.is_empty() {
-            let manifest_version = manifest_get_first(manifest, "version");
-            let manifest_branch = manifest_get_first(manifest, "branch");
-            let manifest_pkgver = manifest_get_first(manifest, "pkgver");
-            let manifest_pkgrel = manifest_get_first(manifest, "pkgrel");
-            let manifest_pkgver_rel = pkgver_cmp_key(&manifest_pkgver, &manifest_pkgrel);
-
-            let version_matches = manifest_version == selector.version
-                || manifest_branch == selector.version
-                || manifest_pkgver == selector.version
-                || manifest_pkgver_rel == selector.version;
-            if !version_matches {
-                continue;
-            }
-        }
-
-        if !selector.branch.is_empty() && manifest_get_first(manifest, "branch") != selector.branch
-        {
-            continue;
-        }
-
-        return Ok(Some(pkgname.clone()));
-    }
-
-    Ok(None)
-}
 
 fn conf_get_i18n(conf_file: &Path) -> Option<String> {
     let conf = read_json_file(conf_file).ok()?;
@@ -936,272 +755,7 @@ fn unquote_shell_value(value: &str) -> String {
     }
 }
 
-fn fetch_url(url: &str) -> CliResult<Vec<u8>> {
-    if !is_supported_url(url) {
-        return Err(CliError::new(
-            DEFAULT_ERROR_CODE,
-            format!("unsupported URL: {url}"),
-        ));
-    }
 
-    if let Some(path) = url.strip_prefix("file://") {
-        return fs::read(path).map_err(|err| {
-            CliError::new(DEFAULT_ERROR_CODE, format!("read file url failed: {err}"))
-        });
-    }
-
-    if has_command("uclient-fetch") {
-        return run_fetch("uclient-fetch", &["-O", "-", url]);
-    }
-    if has_command("wget") {
-        return run_fetch("wget", &["-qO-", url]);
-    }
-    if has_command("curl") {
-        return run_fetch("curl", &["-fsSL", url]);
-    }
-
-    Err(CliError::new(
-        "E_MISSING_COMMAND",
-        "no fetch tool found (need uclient-fetch, wget, or curl)",
-    ))
-}
-
-fn run_fetch(command: &str, args: &[&str]) -> CliResult<Vec<u8>> {
-    let output = Command::new(command)
-        .args(args)
-        .output()
-        .map_err(|err| CliError::new(DEFAULT_ERROR_CODE, format!("{command} failed: {err}")))?;
-
-    if output.status.success() {
-        Ok(output.stdout)
-    } else {
-        let detail = stderr_or_stdout(&output.stdout, &output.stderr);
-        Err(CliError::new(
-            DEFAULT_ERROR_CODE,
-            format!("{command} download failed: {detail}"),
-        ))
-    }
-}
-
-fn need_cmd(name: &str) -> CliResult<()> {
-    if has_command(name) {
-        Ok(())
-    } else {
-        Err(CliError::new(
-            "E_MISSING_COMMAND",
-            format!("missing required command: {name}"),
-        ))
-    }
-}
-
-fn has_command(name: &str) -> bool {
-    if name.contains('/') {
-        return Path::new(name).is_file();
-    }
-
-    let Some(path_env) = env::var_os("PATH") else {
-        return false;
-    };
-
-    env::split_paths(&path_env).any(|dir| {
-        let full = dir.join(name);
-        full.is_file()
-    })
-}
-
-fn opkg_update_ignore() {
-    if !has_command("opkg") {
-        return;
-    }
-    let _ = Command::new("opkg").arg("update").output();
-}
-
-fn opkg_has_package(name: &str) -> bool {
-    let Ok(output) = Command::new("opkg").arg("info").arg(name).output() else {
-        return false;
-    };
-
-    let text = format!(
-        "{}{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-
-    if text.trim().is_empty() {
-        return false;
-    }
-
-    !text.to_ascii_lowercase().contains("unknown package")
-}
-
-fn opkg_installed_version(name: &str) -> Option<String> {
-    let output = Command::new("opkg").arg("status").arg(name).output().ok()?;
-
-    let content = String::from_utf8_lossy(&output.stdout);
-    for line in content.lines() {
-        let trimmed = line.trim();
-        if let Some(value) = trimmed.strip_prefix("Version: ") {
-            return Some(value.trim().to_string());
-        }
-    }
-
-    None
-}
-
-fn opkg_install_pkg(label: &str, target: &str) -> CliResult<()> {
-    let output = Command::new("opkg")
-        .arg("install")
-        .arg(target)
-        .output()
-        .map_err(|err| CliError::new("E_OPKG_INSTALL", format!("opkg install failed: {err}")))?;
-
-    if output.status.success() {
-        return Ok(());
-    }
-
-    let detail = stderr_or_stdout(&output.stdout, &output.stderr);
-    if detail
-        .to_ascii_lowercase()
-        .contains("no space left on device")
-    {
-        return Err(CliError::new(
-            "E_NO_SPACE",
-            format!("{label} install failed: {target} (storage-full). detail=[{detail}]"),
-        ));
-    }
-
-    Err(CliError::new(
-        "E_OPKG_INSTALL",
-        format!("{label} install failed: {target} detail=[{detail}]"),
-    ))
-}
-
-fn opkg_remove_pkg(target: &str) -> CliResult<()> {
-    let output = Command::new("opkg")
-        .arg("remove")
-        .arg(target)
-        .output()
-        .map_err(|err| CliError::new("E_OPKG_REMOVE", format!("opkg remove failed: {err}")))?;
-
-    if output.status.success() {
-        Ok(())
-    } else {
-        let detail = stderr_or_stdout(&output.stdout, &output.stderr);
-        Err(CliError::new(
-            "E_OPKG_REMOVE",
-            format!("opkg remove failed: {target} detail=[{detail}]"),
-        ))
-    }
-}
-
-fn stderr_or_stdout(stdout: &[u8], stderr: &[u8]) -> String {
-    let stderr_text = String::from_utf8_lossy(stderr).trim().to_string();
-    if !stderr_text.is_empty() {
-        return stderr_text;
-    }
-
-    let stdout_text = String::from_utf8_lossy(stdout).trim().to_string();
-    if !stdout_text.is_empty() {
-        stdout_text
-    } else {
-        "unknown error".to_string()
-    }
-}
-
-fn run_command_text(program: &str, args: &[&str]) -> CliResult<String> {
-    let output = Command::new(program)
-        .args(args)
-        .output()
-        .map_err(|err| CliError::new(DEFAULT_ERROR_CODE, format!("{program} failed: {err}")))?;
-
-    if !output.status.success() {
-        return Err(CliError::new(
-            DEFAULT_ERROR_CODE,
-            format!("{program} exited with status {}", output.status),
-        ));
-    }
-
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
-}
-
-fn run_command_capture_output(program: &str, args: &[&str]) -> CliResult<Vec<u8>> {
-    let output = Command::new(program)
-        .args(args)
-        .output()
-        .map_err(|err| CliError::new(DEFAULT_ERROR_CODE, format!("{program} failed: {err}")))?;
-
-    if output.status.success() {
-        Ok(output.stdout)
-    } else {
-        let detail = stderr_or_stdout(&output.stdout, &output.stderr);
-        Err(CliError::new(
-            DEFAULT_ERROR_CODE,
-            format!("{program} failed: {detail}"),
-        ))
-    }
-}
-
-fn ensure_json_object_field(value: &mut Value, key: &str) -> CliResult<()> {
-    let Some(obj) = value.as_object_mut() else {
-        return Err(CliError::new(DEFAULT_ERROR_CODE, "json root is not object"));
-    };
-
-    if !obj.contains_key(key) {
-        obj.insert(key.to_string(), Value::Object(Map::new()));
-    }
-
-    if !obj.get(key).is_some_and(Value::is_object) {
-        return Err(CliError::new(
-            DEFAULT_ERROR_CODE,
-            format!("json field '{key}' is not object"),
-        ));
-    }
-
-    Ok(())
-}
-
-fn read_json_file(path: &Path) -> CliResult<Value> {
-    let content = fs::read_to_string(path).map_err(|err| {
-        CliError::new(
-            DEFAULT_ERROR_CODE,
-            format!("read {} failed: {err}", path.display()),
-        )
-    })?;
-
-    serde_json::from_str(&content).map_err(|err| {
-        CliError::new(
-            DEFAULT_ERROR_CODE,
-            format!("parse {} failed: {err}", path.display()),
-        )
-    })
-}
-
-fn write_json_atomic_pretty(path: &Path, value: &Value) -> CliResult<()> {
-    let mut tmp_name = OsString::from(path.as_os_str());
-    tmp_name.push(".tmp");
-    let tmp_path = PathBuf::from(tmp_name);
-
-    if let Some(parent) = path.parent() {
-        ensure_dir(parent)?;
-    }
-
-    let content = serde_json::to_string_pretty(value)
-        .map_err(|err| CliError::new(DEFAULT_ERROR_CODE, err.to_string()))?;
-    fs::write(&tmp_path, content).map_err(|err| {
-        CliError::new(
-            DEFAULT_ERROR_CODE,
-            format!("write {} failed: {err}", tmp_path.display()),
-        )
-    })?;
-    fs::rename(&tmp_path, path).map_err(|err| {
-        CliError::new(
-            DEFAULT_ERROR_CODE,
-            format!("rename {} failed: {err}", path.display()),
-        )
-    })?;
-
-    Ok(())
-}
 
 fn write_file_atomic(path: &Path, content: &[u8]) -> CliResult<()> {
     let mut tmp_name = OsString::from(path.as_os_str());
@@ -1241,24 +795,32 @@ fn make_temp_dir(prefix: &str) -> CliResult<PathBuf> {
     core_make_temp_dir(prefix).map_err(map_core_error)
 }
 
-fn run_tar_extract(pkgfile: &Path, target_dir: &Path) -> CliResult<()> {
-    let output = Command::new("tar")
-        .arg("-xzf")
-        .arg(pkgfile)
-        .arg("-C")
-        .arg(target_dir)
-        .output()
-        .map_err(|err| CliError::new(DEFAULT_ERROR_CODE, format!("tar extract failed: {err}")))?;
+fn need_cmd(name: &str) -> CliResult<()> {
+    system::need_cmd(name)
+}
 
-    if output.status.success() {
-        Ok(())
-    } else {
-        let detail = stderr_or_stdout(&output.stdout, &output.stderr);
-        Err(CliError::new(
-            DEFAULT_ERROR_CODE,
-            format!("tar extract failed: {detail}"),
-        ))
-    }
+fn has_command(name: &str) -> bool {
+    system::has_command(name)
+}
+
+fn opkg_update_ignore() {
+    system::opkg_update_ignore()
+}
+
+fn opkg_has_package(name: &str) -> bool {
+    system::opkg_has_package(name)
+}
+
+fn opkg_install_pkg(label: &str, target: &str) -> CliResult<()> {
+    system::opkg_install_pkg(label, target)
+}
+
+fn run_command_text(program: &str, args: &[&str]) -> CliResult<String> {
+    system::run_command_text(program, args)
+}
+
+fn run_command_capture_output(program: &str, args: &[&str]) -> CliResult<Vec<u8>> {
+    system::run_command_capture_output(program, args)
 }
 
 fn copy_dir_recursive(source: &Path, target: &Path) -> CliResult<()> {

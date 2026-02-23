@@ -1,7 +1,9 @@
 use crate::{
-    db_del_installed, ensure_dirs, manifest_get_array, manifest_get_scalar, opkg_remove_pkg,
-    read_json_file, run_command_capture_output, App, CliError, CliResult, DEFAULT_ERROR_CODE,
+    ensure_dirs, manifest_get_array, manifest_get_scalar, App, CliError, CliResult,
+    DEFAULT_ERROR_CODE,
 };
+use crate::state::{db_del_installed, read_json_file};
+use crate::system::{opkg_remove_pkg, run_command_capture_output};
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};

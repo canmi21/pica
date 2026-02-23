@@ -98,8 +98,8 @@ pica-pack/bin/<pkgname>/<pkgname>-<pkgver>-<pkgrel>-<arch>.pkg.tar.gz
 `pica -U` 支持本地文件和 URL：
 
 ```
-pica -U ./hello-0.1.0-1-all.pkg.tar.gz
-pica -U https://example.invalid/pkgs/hello-0.1.0-1-all.pkg.tar.gz
+pica -U ./hello-0.1.9-1-all.pkg.tar.gz
+pica -U https://example.invalid/pkgs/hello-0.1.9-1-all.pkg.tar.gz
 ```
 
 允许的 URL 协议：
@@ -175,7 +175,7 @@ arch = all
 pica = <min pica-cli version>
 ```
 
-### 最新推荐字段模板（0.1.0）
+### 最新推荐字段模板（0.1.9）
 
 ```ini
 # Required
@@ -186,11 +186,11 @@ version = rolling
 branch = stable
 protocol = luci
 
-pkgver = 0.1.0
+pkgver = 0.1.9
 pkgrel = 1
 platform = all
 arch = all
-pica = 0.1.0
+pica = 0.1.9
 
 # Optional metadata
 pkgdesc = Example lifecycle package
@@ -426,7 +426,7 @@ arch = all
 platform = openwrt
 uname = x86_64
 
-pica = 0.1.0
+pica = 0.1.9
 
 type = luci
 luci = lua1

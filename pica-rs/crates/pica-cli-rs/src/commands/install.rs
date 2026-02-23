@@ -1,14 +1,19 @@
 use crate::{
     build_precheck_report, canonicalize_display, conf_get_i18n, copy_dir_recursive,
-    db_find_installed_pkgname_by_selector, db_has_installed, db_set_installed, detect_luci_variant,
-    detect_opkg_arches, detect_platform, ensure_dir, ensure_dirs, fetch_url,
-    install_via_feeds_or_ipk, make_temp_dir, manifest_get_first, need_cmd, normalize_uname,
-    opkg_has_package, opkg_install_pkg, opkg_installed_version, opkg_is_installed,
-    opkg_snapshot_installed, opkg_update_ignore, pkg_list_diff_added, pkgver_cmp_key, pkgver_ge,
-    precheck_assert_no_missing, read_json_file, reorder_app_list, report_set_install_result,
-    required_manifest_field, resolve_lang, run_command_text, run_hook, run_tar_extract, ver_ge,
-    write_file_atomic, App, CliError, CliResult, Manifest, Selector, DEFAULT_ERROR_CODE,
-    PICA_VERSION,
+    detect_luci_variant, detect_opkg_arches, detect_platform, ensure_dir, ensure_dirs, install_via_feeds_or_ipk,
+    make_temp_dir, manifest_get_first, normalize_uname, pkg_list_diff_added, pkgver_cmp_key,
+    pkgver_ge, precheck_assert_no_missing, reorder_app_list, required_manifest_field,
+    resolve_lang, run_hook, ver_ge, write_file_atomic, App, CliError, CliResult, Manifest, Selector,
+    DEFAULT_ERROR_CODE, PICA_VERSION,
+};
+use crate::state::{
+    db_find_installed_pkgname_by_selector, db_has_installed, db_set_installed, read_json_file,
+    report_set_install_result,
+};
+use crate::system::{
+    fetch_url, need_cmd, opkg_has_package, opkg_install_pkg, opkg_installed_version,
+    opkg_is_installed, opkg_snapshot_installed, opkg_update_ignore, run_command_text,
+    run_tar_extract,
 };
 use pica_core::repo::is_supported_url;
 use serde_json::{json, Value};
@@ -193,7 +198,7 @@ pub fn install_pica_from_repo(app: &mut App, selector: &str) -> CliResult<()> {
         "Downloading {} ({}) from {}...",
         best.pkgname, best.cmpver, best.repo
     ));
-    let raw = fetch_url(&download_url)?;
+    let raw = fetch_url(&download_url, is_supported_url)?;
     write_file_atomic(&cached, &raw)?;
 
     install_pkgfile(app, &cached, Some(selector.to_string()))
@@ -220,7 +225,7 @@ pub fn install_pkg_source(app: &mut App, source: &str, selector: Option<String>)
         let cached = cache_pkgs.join(guessed);
 
         app.log_info(format!("Downloading pkg from URL: {source}"));
-        let raw = fetch_url(source)?;
+        let raw = fetch_url(source, is_supported_url)?;
         write_file_atomic(&cached, &raw)?;
         return install_pkgfile(app, &cached, selector);
     }
@@ -448,7 +453,7 @@ pub fn install_pkgfile(app: &mut App, pkgfile: &Path, selector: Option<String>) 
     let app_added = pkg_list_diff_added(&snap_before_app, &snap_after_app);
 
     report_set_install_result(
-        app,
+        &app.paths,
         &pkgname,
         &selector,
         &manifest.value,
