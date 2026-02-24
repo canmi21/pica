@@ -5,7 +5,7 @@ use crate::{
     pkgver_ge, precheck_assert_no_missing, reorder_app_list, required_manifest_field,
     resolve_lang, run_hook, ver_ge, write_file_atomic, App, CliError, CliResult, Manifest, Selector,
     E_CONFIG_INVALID, E_IO, E_MANIFEST_INVALID, E_PACKAGE_INVALID, E_PLATFORM_UNSUPPORTED,
-    E_REPO_INVALID, E_VERSION_INCOMPATIBLE, PICA_VERSION,
+    E_REPO_INVALID, E_VERSION_INCOMPATIBLE, E_INTEGRITY_INVALID, PICA_VERSION,
 };
 use crate::state::{
     db_find_installed_pkgname_by_selector, db_has_installed, db_set_installed, read_json_file,
@@ -19,6 +19,7 @@ use crate::system::{
 use pica_core::io::now_unix_secs;
 use pica_core::repo::is_supported_url;
 use serde_json::{json, Value};
+use std::process::Command;
 use std::fs;
 use std::path::Path;
 
@@ -188,6 +189,13 @@ pub fn install_pica_from_repo(app: &mut App, selector: &str) -> CliResult<()> {
         ));
     }
 
+    if best.sha256.len() != 64 || !best.sha256.chars().all(|ch| ch.is_ascii_hexdigit()) {
+        return Err(CliError::new(
+            E_REPO_INVALID,
+            format!("{}: invalid sha256 for {}", best.repo, best.pkgname),
+        ));
+    }
+
     let download_url = if let Some(url) = &best.download_url {
         if !is_supported_url(url) {
             return Err(CliError::new(
@@ -216,6 +224,18 @@ pub fn install_pica_from_repo(app: &mut App, selector: &str) -> CliResult<()> {
         best.pkgname, best.cmpver, best.repo
     ));
     let raw = fetch_url(&download_url, is_supported_url)?;
+
+    let actual_sha256 = sha256_hex(&raw)?;
+    if !actual_sha256.eq_ignore_ascii_case(&best.sha256) {
+        return Err(CliError::new(
+            E_INTEGRITY_INVALID,
+            format!(
+                "sha256 mismatch for {}: expected {}, got {}",
+                best.filename, best.sha256, actual_sha256
+            ),
+        ));
+    }
+
     write_file_atomic(&cached, &raw)?;
 
     install_pkgfile(app, &cached, Some(selector.to_string()))
@@ -566,6 +586,62 @@ pub fn sanitize_cache_filename(value: &str) -> String {
     }
 
     out
+}
+
+fn sha256_hex(content: &[u8]) -> CliResult<String> {
+    if let Ok(mut child) = Command::new("sha256sum")
+        .arg("-")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+    {
+        use std::io::Write;
+        if let Some(stdin) = &mut child.stdin {
+            let _ = stdin.write_all(content);
+        }
+
+        if let Ok(output) = child.wait_with_output() {
+            if output.status.success() {
+                let text = String::from_utf8_lossy(&output.stdout);
+                if let Some(sum) = text.split_whitespace().next() {
+                    if !sum.is_empty() {
+                        return Ok(sum.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    if let Ok(mut child) = Command::new("openssl")
+        .arg("dgst")
+        .arg("-sha256")
+        .arg("-")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+    {
+        use std::io::Write;
+        if let Some(stdin) = &mut child.stdin {
+            let _ = stdin.write_all(content);
+        }
+
+        if let Ok(output) = child.wait_with_output() {
+            if output.status.success() {
+                let text = String::from_utf8_lossy(&output.stdout);
+                if let Some((_, sum)) = text.rsplit_once("= ") {
+                    let trimmed = sum.trim();
+                    if !trimmed.is_empty() {
+                        return Ok(trimmed.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    Err(CliError::new(
+        E_IO,
+        "cannot compute sha256: need command 'sha256sum' or 'openssl'",
+    ))
 }
 
 #[cfg(test)]

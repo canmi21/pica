@@ -70,7 +70,7 @@ Pica Is a Compact Archiver - Pica 喜鹊是一款紧凑型打包器
 
 - 触发方式：
   - 手动触发（`workflow_dispatch`）
-  - 推送 `v*` tag（例如 `v0.1.27`）
+  - 推送 `v*` tag（例如 `v0.1.29`）
   - Pull Request（仅在 Rust/CI 相关文件变更时）
 - 目标平台（musl，适配 OpenWrt 常见架构）：
   - `x86_64-unknown-linux-musl`

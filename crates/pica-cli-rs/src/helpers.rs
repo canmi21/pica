@@ -100,6 +100,11 @@ pub(crate) fn find_pica_candidates_in_index(
                 .get("pica")
                 .and_then(Value::as_str)
                 .map(ToString::to_string);
+            let sha256 = pkg
+                .get("sha256")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
 
             if appname != parsed.appname {
                 continue;
@@ -133,6 +138,7 @@ pub(crate) fn find_pica_candidates_in_index(
                 filename,
                 download_url,
                 min_pica,
+                sha256,
                 pkgname,
             });
         }
@@ -149,6 +155,7 @@ pub(crate) struct RepoCandidate {
     pub(crate) filename: String,
     pub(crate) download_url: Option<String>,
     pub(crate) min_pica: Option<String>,
+    pub(crate) sha256: String,
     pub(crate) pkgname: String,
 }
 

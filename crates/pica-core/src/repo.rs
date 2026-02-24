@@ -17,6 +17,7 @@ pub struct RepoPackage {
     pub platform: String,
     pub arch: String,
     pub filename: String,
+    pub sha256: String,
     #[serde(default)]
     pub appname: Option<String>,
     #[serde(default)]
@@ -69,13 +70,15 @@ pub fn validate_repo(repo: &RepoJson) -> PicaResult<()> {
             || pkg.platform.is_empty()
             || pkg.arch.is_empty()
             || pkg.filename.is_empty()
+            || pkg.sha256.is_empty()
         {
             return Err(PicaError::msg(
-                "package entry missing required string fields: pkgname/pkgver/pkgrel/platform/arch/filename",
+                "package entry missing required string fields: pkgname/pkgver/pkgrel/platform/arch/filename/sha256",
             ));
         }
 
         validate_filename(pkg)?;
+        validate_sha256(pkg)?;
 
         if let Some(download_url) = &pkg.download_url {
             if !is_supported_url(download_url) {
@@ -85,6 +88,18 @@ pub fn validate_repo(repo: &RepoJson) -> PicaResult<()> {
                 )));
             }
         }
+    }
+
+    Ok(())
+}
+
+fn validate_sha256(pkg: &RepoPackage) -> PicaResult<()> {
+    let value = pkg.sha256.trim();
+    if value.len() != 64 || !value.chars().all(|ch| ch.is_ascii_hexdigit()) {
+        return Err(PicaError::msg(format!(
+            "package {}: invalid sha256 {}",
+            pkg.pkgname, pkg.sha256
+        )));
     }
 
     Ok(())
@@ -158,7 +173,8 @@ mod tests {
               "pkgrel": "1",
               "platform": "all",
               "arch": "all",
-              "filename": "hello-1.0.0-1-all.pkg.tar.gz"
+              "filename": "hello-1.0.0-1-all.pkg.tar.gz",
+              "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
             }
           ]
         }
@@ -180,7 +196,30 @@ mod tests {
               "pkgrel": "1",
               "platform": "all",
               "arch": "all",
-              "filename": "../hello.pkg.tar.gz"
+              "filename": "../hello.pkg.tar.gz",
+              "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+            }
+          ]
+        }
+        "#;
+
+        assert!(parse_repo_json(input).is_err());
+    }
+
+    #[test]
+    fn reject_invalid_sha256() {
+        let input = r#"
+        {
+          "schema": 1,
+          "packages": [
+            {
+              "pkgname": "hello",
+              "pkgver": "1.0.0",
+              "pkgrel": "1",
+              "platform": "all",
+              "arch": "all",
+              "filename": "hello-1.0.0-1-all.pkg.tar.gz",
+              "sha256": "xyz"
             }
           ]
         }

@@ -85,10 +85,14 @@ pica-pack/bin/<pkgname>/<pkgname>-<pkgver>-<pkgrel>-<arch>.pkg.tar.gz
   - `platform`
   - `arch`
   - `filename`
+  - `sha256`
+- `sha256` 必须是 64 位十六进制字符串
 - `filename` 必须是纯文件名（不能含 `/`、不能含 `..`），且必须以 `.pkg.tar.gz` 结尾
 - `filename` 必须与其他字段一致：
   - `platform != all`：`<pkgname>-<pkgver>-<pkgrel>-<platform>-<arch>.pkg.tar.gz`
   - `platform = all`：`<pkgname>-<pkgver>-<pkgrel>-<arch>.pkg.tar.gz`
+
+安装阶段（`-Si/-Sp`）在下载后、写入缓存和安装前，必须校验下载文件 SHA-256 与 `repo.json` 的 `sha256` 一致，否则失败。
 - 可选 `download_url`（若提供）必须是 `http://`、`https://` 或 `file://`，用于覆盖默认下载路径
 
 任一约束不满足，`pica -S` 会拒绝该 repo。
@@ -98,8 +102,8 @@ pica-pack/bin/<pkgname>/<pkgname>-<pkgver>-<pkgrel>-<arch>.pkg.tar.gz
 `pica -U` 支持本地文件和 URL：
 
 ```
-pica -U ./hello-0.1.27-1-all.pkg.tar.gz
-pica -U https://example.invalid/pkgs/hello-0.1.27-1-all.pkg.tar.gz
+pica -U ./hello-0.1.29-1-all.pkg.tar.gz
+pica -U https://example.invalid/pkgs/hello-0.1.29-1-all.pkg.tar.gz
 ```
 
 允许的 URL 协议：
@@ -175,7 +179,7 @@ arch = all
 pica = <min pica-cli version>
 ```
 
-### 最新推荐字段模板（0.1.27）
+### 最新推荐字段模板（0.1.29）
 
 ```ini
 # Required
@@ -188,11 +192,11 @@ branch = stable
 protocol = luci
 luci_desc = LuCI plugin for hello service
 
-pkgver = 0.1.27
+pkgver = 0.1.29
 pkgrel = 1
 platform = all
 arch = all
-pica = 0.1.27
+pica = 0.1.29
 
 # Optional metadata
 pkgdesc = Example lifecycle package
@@ -457,7 +461,7 @@ arch = all
 platform = openwrt-any
 uname = x86_64
 
-pica = 0.1.27
+pica = 0.1.29
 source = pica
 
 type = luci

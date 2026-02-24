@@ -23,6 +23,7 @@ pub const E_MANIFEST_INVALID: &str = "E_MANIFEST_INVALID";
 pub const E_PACKAGE_INVALID: &str = "E_PACKAGE_INVALID";
 pub const E_PLATFORM_UNSUPPORTED: &str = "E_PLATFORM_UNSUPPORTED";
 pub const E_VERSION_INCOMPATIBLE: &str = "E_VERSION_INCOMPATIBLE";
+pub const E_INTEGRITY_INVALID: &str = "E_INTEGRITY_INVALID";
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JsonMode {
     None,
