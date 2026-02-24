@@ -2,15 +2,28 @@
 
 Pica Is a Compact Archiver - Pica 喜鹊是一款紧凑型打包器
 
-该名字继承自 Wine 递归浪漫，简单紧凑而不落后，以及 Arch 相似的滚动更新机制。
+该名字继承自 Wine 递归浪漫，简单紧凑而不落后，以及运用 Arch 系包管理器相似的滚动更新机制。
 
+目前支持双版（Rust & Bash），后续可能淘汰掉 Bash 版本以便维护。
 # todo
 
-- 完成生命周期定义
 - 完善 CLI 文档/安装方式
 - 完成简单封装
 - 完成标准定义
 - 全流程滚动更新
+
+## 特性
+
+对于开发者来说，只需要将你的固件适配好部分依赖的 kmod 并且支持 Pica，即可以最小化的形式实现应用类似滚动更新特性，Pica 还是受限于 openwrt 包管理器和 openwrt 的轻量化以及内核裁切特性，这是无法避免的。
+
+- 高度自由，用户友好功能强大
+- 分布式，可自建用户仓库
+- 前瞻性，支持多分支应用声明、生命周期管理
+- 小型化，基于 openwrt 深度打造
+
+对于用户来说，你只需要使用 pica 完成包的管理，定期进行 pica 的升级，当然升级目前不支持，或者我们需要通过另外的手段实现，目前不能通过 pica 升级 pica。
+
+---
 
 ## CLI（当前支持）
 
@@ -26,29 +39,7 @@ Pica Is a Compact Archiver - Pica 喜鹊是一款紧凑型打包器
 - `pica -Qi <pkgname>`：显示已安装包信息
 - `pica -Ql <pkgname>`：显示已安装包 License
 
-说明：仓库里的 CLI 实现位于 `pica-cli/pica`（bash 脚本）。更完整的包标准/字段约定见 `docs/standard.md`。
-
-### LuCI 兼容检查（manifest）
-
-当包强依赖某种 LuCI 实现时，建议在 `manifest` 中声明：
-
-```
-type = luci
-luci = lua1
-```
-
-或：
-
-```
-type = luci
-luci = js2
-```
-
-约定：
-
-- 未包含 `type = luci`：不做 LuCI 兼容检查（即使存在 `luci = ...` 也不触发）
-- 包含 `type = luci`：必须同时声明 `luci = lua1|js2`
-- `pica -U`（以及部分安装路径）会尝试检测本机 LuCI 实现并匹配；无法检测或不匹配则安装失败
+说明：仓库里的 CLI 实现位于 `pica-cli/pica`（bash 版本）。更完整的包标准/字段约定见 `docs/standard.md`。
 
 ## 配置文件
 
@@ -65,18 +56,3 @@ luci = js2
 
 - `repos[]`：pica 仓库列表（`pica -S` / `pica -Sp` 使用）
 - `i18n`：默认 LuCI i18n 语言（用于安装 `luci-i18n-<app>-<lang>`，不影响 pica 自身输出语言）
-
-## License
-
-GPL-3.0-only
-- 用户仓库
-
-## 特性
-
-对于开发者来说，只需要将你的固件适配好部分依赖的 kmod 并且支持 Pica，即可以最小化的形式实现应用类似滚动更新，但是我们还是受限于 opkg 和 openwrt 的轻量化以及内核裁切特性，这是无法避免的。
-
-- 高度自由，用户友好
-- 分布式，支持用户仓库
-- 小型化，基于 openwrt 深度打造
-
-对于用户来说，你只需要使用 pica 完成包的管理，定期进行 pica 的升级，当然升级目前不支持，或者我们需要通过另外的手段实现，目前不能通过 pica 升级 pica。
