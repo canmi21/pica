@@ -1,11 +1,12 @@
 pkgname = hello
 appname = hello
-author = demo
+origin = https://github.com/miaoermua/pica
 version = rolling
 branch = stable
 protocol = luci
+luci_desc = LuCI plugin for hello service
 
-pkgver = 0.1.11
+pkgver = 0.1.14
 pkgrel = 1
 pkgdesc = Example lifecycle package
 url = https://example.invalid
@@ -15,7 +16,7 @@ proprietary = false
 
 platform = all
 arch = all
-pica = 0.1.11
+pica = 0.1.14
 
 # Optional compatibility tags (recommended):
 # uname = arm64

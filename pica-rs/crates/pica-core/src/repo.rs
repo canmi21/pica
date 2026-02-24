@@ -20,13 +20,15 @@ pub struct RepoPackage {
     #[serde(default)]
     pub appname: Option<String>,
     #[serde(default)]
-    pub author: Option<String>,
-    #[serde(default)]
     pub version: Option<String>,
     #[serde(default)]
     pub branch: Option<String>,
     #[serde(default)]
     pub protocol: Option<String>,
+    #[serde(default)]
+    pub origin: Option<String>,
+    #[serde(default)]
+    pub luci_desc: Option<String>,
     #[serde(default)]
     pub pica: Option<String>,
     #[serde(default)]

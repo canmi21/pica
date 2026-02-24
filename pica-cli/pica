@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PICA_VERSION="0.1.11"
+PICA_VERSION="0.1.14"
 
 PICA_ETC_DIR="${PICA_ETC_DIR:-/etc/pica}"
 PICA_CONF_FILE="${PICA_CONF_FILE:-${PICA_ETC_DIR}/pica.json}"
@@ -218,9 +218,8 @@ selector_is_structured() {
 parse_app_selector() {
   # Supported selectors:
   #   app
-  #   app@author
-  #   app@author:version
-  #   app@author:version(branch)
+  #   app:version
+  #   app:version(branch)
   # Full-width variants are normalized:
   #   app@作者：版本（分支）
   local selector="$1"
@@ -231,13 +230,13 @@ parse_app_selector() {
   norm="${norm//）/)}"
 
   local appname="$norm"
-  local author=""
+  local _ignored_selector_origin=""
   local version=""
   local branch=""
 
   if [[ "$norm" =~ ^([^@]+)@([^:]+):(.*)$ ]]; then
     appname="${BASH_REMATCH[1]}"
-    author="${BASH_REMATCH[2]}"
+    _ignored_selector_origin="${BASH_REMATCH[2]}"
     local tail
     tail="${BASH_REMATCH[3]}"
     if [[ "$tail" =~ ^([^()]+)\(([^()]+)\)$ ]]; then
@@ -248,11 +247,11 @@ parse_app_selector() {
     fi
   elif [[ "$norm" =~ ^([^@]+)@([^()]+)\(([^()]+)\)$ ]]; then
     appname="${BASH_REMATCH[1]}"
-    author="${BASH_REMATCH[2]}"
+    _ignored_selector_origin="${BASH_REMATCH[2]}"
     branch="${BASH_REMATCH[3]}"
   elif [[ "$norm" =~ ^([^@]+)@([^:]+)$ ]]; then
     appname="${BASH_REMATCH[1]}"
-    author="${BASH_REMATCH[2]}"
+    _ignored_selector_origin="${BASH_REMATCH[2]}"
   elif [[ "$norm" =~ ^([^:]+):(.*)$ ]]; then
     appname="${BASH_REMATCH[1]}"
     local tail
@@ -269,10 +268,9 @@ parse_app_selector() {
     --arg raw "$selector" \
     --arg norm "$norm" \
     --arg appname "$appname" \
-    --arg author "$author" \
     --arg version "$version" \
     --arg branch "$branch" \
-    '{raw:$raw, norm:$norm, appname:$appname, author:$author, version:$version, branch:$branch}'
+    '{raw:$raw, norm:$norm, appname:$appname, version:$version, branch:$branch}'
 }
 
 opkg_snapshot_installed() {
@@ -418,7 +416,7 @@ JSON
       package: {
         pkgname: ($manifest.pkgname // ""),
         appname: ($manifest.appname // $manifest.pkgname // ""),
-        author: ($manifest.author // ""),
+        origin: ($manifest.origin // ""),
         version: ($manifest.version // ""),
         branch: ($manifest.branch // ""),
         protocol: ($manifest.protocol // ""),
@@ -462,7 +460,7 @@ Notes:
   - Config: /etc/pica/pica.json
   - State:  /var/lib/pica/db.json, /var/lib/pica/index.json
   - Lock:   /var/lib/pica/db.lck
-  - Selector example: app@author:version(branch)
+  - Selector example: app:version(branch)
 EOF
 }
 
@@ -623,14 +621,13 @@ db_get_installed_manifest() {
 
 db_find_installed_pkgname_by_selector() {
   local selector="$1"
-  local parsed appname author version branch
+  local parsed appname version branch
   parsed="$(parse_app_selector "$selector")"
   appname="$(jq -r '.appname' <<<"$parsed")"
-  author="$(jq -r '.author' <<<"$parsed")"
   version="$(jq -r '.version' <<<"$parsed")"
   branch="$(jq -r '.branch' <<<"$parsed")"
 
-  jq -r --arg appname "$appname" --arg author "$author" --arg version "$version" --arg branch "$branch" '
+  jq -r --arg appname "$appname" --arg version "$version" --arg branch "$branch" '
     .installed
     | to_entries
     | map(
@@ -639,7 +636,6 @@ db_find_installed_pkgname_by_selector() {
           ((.value.manifest.appname // "") == $appname) or
           ((.value.manifest.pkgname // "") == $appname)
         )
-        | select($author == "" or (.value.manifest.author // "") == $author)
         | select(
             $version == "" or
             (.value.manifest.version // "") == $version or
@@ -930,7 +926,7 @@ manifest_get_scalar() {
 manifest_to_selector() {
   local manifest_json="$1"
   local fallback_pkgname="${2:-}"
-  local appname author version branch
+  local appname version branch
 
   appname="$(manifest_get_first "$manifest_json" appname)"
   if [[ -z "$appname" ]]; then
@@ -939,14 +935,10 @@ manifest_to_selector() {
   if [[ -z "$appname" ]]; then
     appname="$fallback_pkgname"
   fi
-  author="$(manifest_get_first "$manifest_json" author)"
   version="$(manifest_get_first "$manifest_json" version)"
   branch="$(manifest_get_first "$manifest_json" branch)"
 
   local out="$appname"
-  if [[ -n "$author" ]]; then
-    out+="@$author"
-  fi
   if [[ -n "$version" ]]; then
     out+=":$version"
   fi
@@ -1092,23 +1084,21 @@ find_pica_package_in_index() {
   local host_platform
   host_platform="$(detect_platform)"
 
-  local parsed appname author version branch
+  local parsed appname version branch
   parsed="$(parse_app_selector "$selector")"
   appname="$(jq -r '.appname' <<<"$parsed")"
-  author="$(jq -r '.author' <<<"$parsed")"
   version="$(jq -r '.version' <<<"$parsed")"
   branch="$(jq -r '.branch' <<<"$parsed")"
 
   # Output:
   # cmpver\tpkgver\tpkgrel\trepo\turl\tfilename\tdownload_url\tpica\tpkgname
-  jq -r --arg appname "$appname" --arg author "$author" --arg version "$version" --arg branch "$branch" '
+  jq -r --arg appname "$appname" --arg version "$version" --arg branch "$branch" '
     .repos
     | to_entries
     | map({repo: .key, url: .value.url, repo_platform: (.value.platform // ""), pkgs: (.value.data.packages // [])})
     | .[]
     | .pkgs[]
     | select((.appname // .pkgname // "") == $appname)
-    | select($author == "" or (.author // "") == $author)
     | select(
         $version == "" or
         (.version // "") == $version or
@@ -1200,8 +1190,7 @@ install_app_via_opkg() {
   local parsed app
   parsed="$(parse_app_selector "$selector")"
   app="$(jq -r '.appname' <<<"$parsed")"
-  local selector_author selector_version selector_branch
-  selector_author="$(jq -r '.author' <<<"$parsed")"
+  local selector_version selector_branch
   selector_version="$(jq -r '.version' <<<"$parsed")"
   selector_branch="$(jq -r '.branch' <<<"$parsed")"
   ensure_dirs
@@ -1247,7 +1236,6 @@ install_app_via_opkg() {
     jq -n \
       --arg pkgname "$app" \
       --arg appname "$app" \
-      --arg author "$selector_author" \
       --arg version "$selector_version" \
       --arg branch "$selector_branch" \
       --arg pkgver "${base_ver:-}" \
@@ -1255,7 +1243,7 @@ install_app_via_opkg() {
       --arg arch "all" \
       --arg source "opkg" \
       --argjson opkgs "$(printf '%s\n' "${to_install[@]}" | jq -R . | jq -s .)" \
-      '{pkgname:$pkgname, appname:$appname, author:$author, version:$version, branch:$branch, pkgver:$pkgver, platform:$platform, arch:$arch, source:$source, opkg:$opkgs}'
+      '{pkgname:$pkgname, appname:$appname, version:$version, branch:$branch, pkgver:$pkgver, platform:$platform, arch:$arch, source:$source, app:$opkgs}'
   )"
 
   db_set_installed "$app" "$manifest_json" "opkg"
@@ -1351,16 +1339,12 @@ install_pkgfile() {
 
   local canonical_selector
   canonical_selector="$pkgname"
-  local m_appname m_author m_version m_branch
+  local m_appname m_version m_branch
   m_appname="$(manifest_get_first "$manifest_json" appname)"
-  m_author="$(manifest_get_first "$manifest_json" author)"
   m_version="$(manifest_get_first "$manifest_json" version)"
   m_branch="$(manifest_get_first "$manifest_json" branch)"
   if [[ -n "$m_appname" ]]; then
     canonical_selector="$m_appname"
-    if [[ -n "$m_author" ]]; then
-      canonical_selector+="@$m_author"
-    fi
     if [[ -n "$m_version" ]]; then
       canonical_selector+=":$m_version"
     fi
@@ -1450,10 +1434,11 @@ install_pkgfile() {
   # Normalize optional selector metadata defaults.
   manifest_json="$(jq --arg fallback "$pkgname" '
     .appname //= ($fallback)
-    | .author //= ""
     | .version //= ""
     | .branch //= ""
     | .protocol //= ""
+    | .origin //= ""
+    | .luci_desc //= ""
   ' <<<"$manifest_json")"
 
   resolve_lang() {
@@ -1663,16 +1648,13 @@ install_pkgfile() {
     fi
   done
 
-  # 4) install cmd/ payload to /usr/bin (optional)
-  # Only when manifest declares at least one `cmd = ...` entry.
-  if jq -e '.cmd? != null' <<<"$manifest_json" >/dev/null 2>&1; then
-    if [[ -d "$tmpdir/cmd" ]]; then
-      mkdir -p /usr/bin
-      if command -v cp >/dev/null 2>&1; then
-        cp -a "$tmpdir/cmd/." /usr/bin/
-      else
-        tar -C "$tmpdir/cmd" -cf - . | tar -C /usr/bin -xf -
-      fi
+  # 4) install cmd/ payload to /usr/bin
+  if [[ -d "$tmpdir/cmd" ]]; then
+    mkdir -p /usr/bin
+    if command -v cp >/dev/null 2>&1; then
+      cp -a "$tmpdir/cmd/." /usr/bin/
+    else
+      tar -C "$tmpdir/cmd" -cf - . | tar -C /usr/bin -xf -
     fi
   fi
 
@@ -1738,14 +1720,6 @@ remove_pkg() {
 
   run_cmd_install_tree "$pkgname/$cmd_remove" remove
 
-  # remove cmd files if listed, else do nothing (avoid deleting unknown files)
-  # We support optional 'cmd' entries in manifest listing relative filenames.
-  while IFS= read -r cmdpath; do
-    [[ -z "$cmdpath" ]] && continue
-    log_info "removing file: /usr/bin/$cmdpath"
-    rm -f "/usr/bin/$cmdpath" || true
-  done < <(manifest_get_array "$manifest_json" cmd || true)
-
   # remove opkg packages by app/app_i18n mapping
   local remove_list=""
   local app_name
@@ -1806,10 +1780,11 @@ query_info() {
   echo "Pkgver          : $(manifest_get_first "$manifest" pkgver)"
   echo "Pkgrel          : $(manifest_get_first "$manifest" pkgrel)"
   echo "AppName         : $(manifest_get_first "$manifest" appname)"
-  echo "Author          : $(manifest_get_first "$manifest" author)"
+  echo "Origin          : $(manifest_get_first "$manifest" origin)"
   echo "Version Tag     : $(manifest_get_first "$manifest" version)"
   echo "Branch          : $(manifest_get_first "$manifest" branch)"
   echo "Protocol        : $(manifest_get_first "$manifest" protocol)"
+  echo "LuCI Desc       : $(manifest_get_first "$manifest" luci_desc)"
   echo "Platform        : $(manifest_get_first "$manifest" platform)"
   echo "Arch            : $(manifest_get_first "$manifest" arch)"
   echo "Uname           : $(manifest_get_first "$manifest" uname)"
@@ -1852,7 +1827,6 @@ upgrade_all() {
     | [
         .key,
         (.value.manifest.appname // .value.manifest.pkgname // .key),
-        (.value.manifest.author // ""),
         (.value.manifest.version // ""),
         (.value.manifest.branch // ""),
         (
@@ -1870,20 +1844,16 @@ upgrade_all() {
   fi
 
   local updated_any=0
-  local line pkgname appname author version branch installed_ver selector
+  local line pkgname appname version branch installed_ver selector
   while IFS= read -r line; do
     [[ -z "$line" ]] && continue
     pkgname="$(cut -f1 <<<"$line")"
     appname="$(cut -f2 <<<"$line")"
-    author="$(cut -f3 <<<"$line")"
-    version="$(cut -f4 <<<"$line")"
-    branch="$(cut -f5 <<<"$line")"
-    installed_ver="$(cut -f6 <<<"$line")"
+    version="$(cut -f3 <<<"$line")"
+    branch="$(cut -f4 <<<"$line")"
+    installed_ver="$(cut -f5 <<<"$line")"
 
     selector="$appname"
-    if [[ -n "$author" ]]; then
-      selector+="@$author"
-    fi
     if [[ -n "$version" ]]; then
       selector+=":$version"
     fi

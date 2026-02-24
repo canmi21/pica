@@ -41,7 +41,7 @@ pub fn report_set_install_result(
         "package": {
             "pkgname": manifest_get_first(manifest, "pkgname"),
             "appname": appname,
-            "author": manifest_get_first(manifest, "author"),
+            "origin": manifest_get_first(manifest, "origin"),
             "version": manifest_get_first(manifest, "version"),
             "branch": manifest_get_first(manifest, "branch"),
             "protocol": manifest_get_first(manifest, "protocol"),
@@ -123,11 +123,6 @@ pub fn db_find_installed_pkgname_by_selector(
             || manifest_get_first(manifest, "appname") == selector.appname
             || manifest_get_first(manifest, "pkgname") == selector.appname;
         if !key_matches {
-            continue;
-        }
-
-        if !selector.author.is_empty() && manifest_get_first(manifest, "author") != selector.author
-        {
             continue;
         }
 

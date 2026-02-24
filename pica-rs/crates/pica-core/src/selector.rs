@@ -5,7 +5,6 @@ pub struct Selector {
     pub raw: String,
     pub norm: String,
     pub appname: String,
-    pub author: String,
     pub version: String,
     pub branch: String,
 }
@@ -15,25 +14,22 @@ impl Selector {
         let norm = raw.replace('：', ":").replace('（', "(").replace('）', ")");
 
         let mut appname = norm.clone();
-        let mut author = String::new();
         let mut version = String::new();
         let mut branch = String::new();
 
         if let Some((left, right)) = norm.split_once('@') {
             appname = left.to_string();
-            if let Some((a, tail)) = right.split_once(':') {
-                author = a.to_string();
+            if let Some((_, tail)) = right.split_once(':') {
                 if let Some((v, b)) = parse_version_branch(tail) {
                     version = v;
                     branch = b;
                 } else {
                     version = tail.to_string();
                 }
-            } else if let Some((a, b)) = parse_author_branch(right) {
-                author = a;
+            } else if let Some((_, b)) = parse_origin_branch(right) {
                 branch = b;
             } else {
-                author = right.to_string();
+                version = right.to_string();
             }
         } else if let Some((left, tail)) = norm.split_once(':') {
             appname = left.to_string();
@@ -49,7 +45,6 @@ impl Selector {
             raw: raw.to_string(),
             norm,
             appname,
-            author,
             version,
             branch,
         }
@@ -65,10 +60,6 @@ impl Selector {
 
     pub fn to_canonical_string(&self) -> String {
         let mut out = self.appname.clone();
-        if !self.author.is_empty() {
-            out.push('@');
-            out.push_str(&self.author);
-        }
         if !self.version.is_empty() {
             out.push(':');
             out.push_str(&self.version);
@@ -98,7 +89,7 @@ fn parse_version_branch(input: &str) -> Option<(String, String)> {
     Some((version.to_string(), branch.to_string()))
 }
 
-fn parse_author_branch(input: &str) -> Option<(String, String)> {
+fn parse_origin_branch(input: &str) -> Option<(String, String)> {
     if !input.ends_with(')') {
         return None;
     }
@@ -106,12 +97,12 @@ fn parse_author_branch(input: &str) -> Option<(String, String)> {
     if open_pos == 0 {
         return None;
     }
-    let author = &input[..open_pos];
+    let origin_hint = &input[..open_pos];
     let branch = &input[open_pos + 1..input.len() - 1];
-    if author.is_empty() || branch.is_empty() {
+    if origin_hint.is_empty() || branch.is_empty() {
         return None;
     }
-    Some((author.to_string(), branch.to_string()))
+    Some((origin_hint.to_string(), branch.to_string()))
 }
 
 #[cfg(test)]
@@ -122,33 +113,30 @@ mod tests {
     fn parse_simple_selector() {
         let parsed = Selector::parse("hello");
         assert_eq!(parsed.appname, "hello");
-        assert!(parsed.author.is_empty());
         assert!(parsed.version.is_empty());
         assert!(parsed.branch.is_empty());
     }
 
     #[test]
     fn parse_full_selector() {
-        let parsed = Selector::parse("app@author:1.2(stable)");
+        let parsed = Selector::parse("app:1.2(stable)");
         assert_eq!(parsed.appname, "app");
-        assert_eq!(parsed.author, "author");
         assert_eq!(parsed.version, "1.2");
         assert_eq!(parsed.branch, "stable");
-        assert_eq!(parsed.to_canonical_string(), "app@author:1.2(stable)");
+        assert_eq!(parsed.to_canonical_string(), "app:1.2(stable)");
     }
 
     #[test]
     fn parse_full_width_symbols() {
         let parsed = Selector::parse("app@作者：版本（分支）");
         assert_eq!(parsed.appname, "app");
-        assert_eq!(parsed.author, "作者");
         assert_eq!(parsed.version, "版本");
         assert_eq!(parsed.branch, "分支");
         assert_eq!(parsed.norm, "app@作者:版本(分支)");
     }
 
     #[test]
-    fn parse_without_author_with_version() {
+    fn parse_without_origin_with_version() {
         let parsed = Selector::parse("app:rolling");
         assert_eq!(parsed.appname, "app");
         assert_eq!(parsed.version, "rolling");

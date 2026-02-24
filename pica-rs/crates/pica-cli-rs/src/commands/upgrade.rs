@@ -34,7 +34,6 @@ pub fn upgrade_all(app: &mut App) -> CliResult<()> {
             }
         };
 
-        let author = manifest_get_first(manifest, "author");
         let version = manifest_get_first(manifest, "version");
         let branch = manifest_get_first(manifest, "branch");
         let installed_ver = pkgver_cmp_key(
@@ -43,10 +42,6 @@ pub fn upgrade_all(app: &mut App) -> CliResult<()> {
         );
 
         let mut selector = appname;
-        if !author.is_empty() {
-            selector.push('@');
-            selector.push_str(&author);
-        }
         if !version.is_empty() {
             selector.push(':');
             selector.push_str(&version);

@@ -26,15 +26,6 @@ pub fn remove_pkg(app: &mut App, pkgname: &str) -> CliResult<()> {
     app.log_info(format!("Removing {pkgname}..."));
     run_cmd_install_tree(app, &format!("{pkgname}/{cmd_remove}"), "remove")?;
 
-    for cmdpath in manifest_get_array(&manifest, "cmd") {
-        if cmdpath.is_empty() {
-            continue;
-        }
-        let file = Path::new("/usr/bin").join(&cmdpath);
-        app.log_info(format!("removing file: {}", file.display()));
-        let _ = fs::remove_file(file);
-    }
-
     let mut remove_set = BTreeSet::new();
     for app_name in manifest_get_array(&manifest, "app") {
         let trimmed = app_name.trim();

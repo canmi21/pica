@@ -92,7 +92,6 @@ impl Manifest {
             raw: String::new(),
             norm: String::new(),
             appname,
-            author: self.get_first("author"),
             version: self.get_first("version"),
             branch: self.get_first("branch"),
         };
@@ -123,7 +122,7 @@ impl Manifest {
                     Value::String(fallback_pkgname.to_string()),
                 );
             }
-            for key in ["author", "version", "branch", "protocol"] {
+            for key in ["version", "branch", "protocol"] {
                 if obj.get(key).is_none() {
                     obj.insert(key.to_string(), Value::String(String::new()));
                 }
@@ -243,14 +242,10 @@ mod tests {
         let text = r#"
         pkgname = hello
         appname = hello
-        author = demo
         version = rolling
         branch = stable
         "#;
         let manifest = Manifest::from_text(text).expect("parse manifest");
-        assert_eq!(
-            manifest.canonical_selector("hello"),
-            "hello@demo:rolling(stable)"
-        );
+        assert_eq!(manifest.canonical_selector("hello"), "hello:rolling(stable)");
     }
 }

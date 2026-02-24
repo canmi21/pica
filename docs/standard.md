@@ -98,8 +98,8 @@ pica-pack/bin/<pkgname>/<pkgname>-<pkgver>-<pkgrel>-<arch>.pkg.tar.gz
 `pica -U` 支持本地文件和 URL：
 
 ```
-pica -U ./hello-0.1.11-1-all.pkg.tar.gz
-pica -U https://example.invalid/pkgs/hello-0.1.11-1-all.pkg.tar.gz
+pica -U ./hello-0.1.14-1-all.pkg.tar.gz
+pica -U https://example.invalid/pkgs/hello-0.1.14-1-all.pkg.tar.gz
 ```
 
 允许的 URL 协议：
@@ -175,22 +175,23 @@ arch = all
 pica = <min pica-cli version>
 ```
 
-### 最新推荐字段模板（0.1.11）
+### 最新推荐字段模板（0.1.14）
 
 ```ini
 # Required
 pkgname = hello
 appname = hello
-author = demo
+origin = https://github.com/miaoermua/pica
 version = rolling
 branch = stable
 protocol = luci
+luci_desc = LuCI plugin for hello service
 
-pkgver = 0.1.11
+pkgver = 0.1.14
 pkgrel = 1
 platform = all
 arch = all
-pica = 0.1.11
+pica = 0.1.14
 
 # Optional metadata
 pkgdesc = Example lifecycle package
@@ -215,10 +216,6 @@ app = hello
 app_i18n = luci-i18n-hello-{lang}
 base = busybox
 # kmod = kmod-tun
-
-# Optional: uninstall whitelist (repeatable)
-opkg = hello
-opkg = luci-i18n-hello-{lang}
 
 # Lifecycle scripts (optional)
 cmd_install = cmd/install
@@ -269,6 +266,12 @@ kmod = <opkg package name>
 # The {lang} placeholder is resolved from pica config (default: zh-cn).
 app_i18n = <opkg package name template>
 
+# Origin metadata
+origin = <project homepage or repository URL>
+
+# LuCI description metadata (optional)
+luci_desc = <short LuCI plugin description>
+
 # lifecycle cmd scripts (optional)
 cmd_install = <relative file>
 cmd_update = <relative file>
@@ -286,6 +289,8 @@ luci = lua1
 
 - `app/base/kmod` 定义“安装清单”，pica 安装时必须遍历这些字段来决定需要安装的 opkg 包。
 - `app_i18n` 允许包含 `{lang}` 占位符，pica 根据配置 `i18n` 选择实际 i18n 包名（当前仅 `zh-cn` 时参与安装/卸载）。
+- `origin` 用于记录程序来源（建议直接填仓库/项目地址，如 GitHub URL）。
+- `luci_desc` 用于记录 LuCI 插件描述（与 `pkgdesc` 的通用程序描述分离）。
 - 卸载默认按 `app` + `app_i18n`（当 `i18n=zh-cn`）映射执行，不再依赖 `opkg` 字段。
 - `cmd_install/cmd_update/cmd_remove` 是生命周期脚本（包内路径，一般在 `cmd/` 下）。
 
@@ -398,9 +403,8 @@ LICENSE
 
 ```
 app
-app@author
-app@author:version
-app@author:version(branch)
+app:version
+app:version(branch)
 ```
 
 约定：
@@ -413,10 +417,11 @@ app@author:version(branch)
 ```
 pkgname = luci-app-example
 appname = example
-author = demo
+origin = https://github.com/example/luci-app-example
 version = rolling
 branch = openwrt-23
 protocol = luci
+luci_desc = Example LuCI plugin for OpenWrt
 
 pkgver = 1.0.0
 pkgrel = 1
@@ -431,7 +436,7 @@ arch = all
 platform = openwrt-any
 uname = x86_64
 
-pica = 0.1.11
+pica = 0.1.14
 source = pica
 
 type = luci
@@ -444,11 +449,6 @@ base = luci-base
 base = rpcd
 base = ca-bundle
 kmod = kmod-tun
-
-# Optional uninstall whitelist (repeatable)
-app = luci-app-example
-app_i18n = luci-i18n-example-{lang}
-cmd = example-cli
 
 # Lifecycle scripts (optional)
 cmd_install = cmd/install

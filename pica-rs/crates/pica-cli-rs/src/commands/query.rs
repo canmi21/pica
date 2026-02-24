@@ -69,8 +69,8 @@ pub fn query_info(app: &mut App, pkgname: &str) -> CliResult<()> {
         manifest_get_first(manifest, "appname")
     );
     println!(
-        "Author          : {}",
-        manifest_get_first(manifest, "author")
+        "Origin          : {}",
+        manifest_get_first(manifest, "origin")
     );
     println!(
         "Version Tag     : {}",
@@ -83,6 +83,10 @@ pub fn query_info(app: &mut App, pkgname: &str) -> CliResult<()> {
     println!(
         "Protocol        : {}",
         manifest_get_first(manifest, "protocol")
+    );
+    println!(
+        "LuCI Desc       : {}",
+        manifest_get_first(manifest, "luci_desc")
     );
     println!(
         "Platform        : {}",

@@ -116,7 +116,6 @@ pub fn install_app_via_opkg(app: &mut App, selector: &str) -> CliResult<()> {
     let manifest = json!({
         "pkgname": appname,
         "appname": appname,
-        "author": parsed.author,
         "version": parsed.version,
         "branch": parsed.branch,
         "pkgver": base_ver,
@@ -427,14 +426,10 @@ pub fn install_pkgfile(app: &mut App, pkgfile: &Path, selector: Option<String>) 
         }
     }
 
-    let manifest_json = manifest.value.clone();
-    let has_cmd_field = manifest_json.get("cmd").is_some();
-    if has_cmd_field {
-        let cmd_dir = tmpdir.join("cmd");
-        if cmd_dir.is_dir() {
-            ensure_dir(Path::new("/usr/bin"))?;
-            copy_dir_recursive(&cmd_dir, Path::new("/usr/bin"))?;
-        }
+    let cmd_dir = tmpdir.join("cmd");
+    if cmd_dir.is_dir() {
+        ensure_dir(Path::new("/usr/bin"))?;
+        copy_dir_recursive(&cmd_dir, Path::new("/usr/bin"))?;
     }
 
     let env_file = tmpdir.join("cmd/.env");
@@ -468,7 +463,7 @@ pub fn install_pkgfile(app: &mut App, pkgfile: &Path, selector: Option<String>) 
     if manifest_stored.get("appname").is_none() {
         manifest_stored["appname"] = json!(pkgname.clone());
     }
-    for key in ["author", "version", "branch", "protocol"] {
+    for key in ["version", "branch", "protocol", "origin", "luci_desc"] {
         if manifest_stored.get(key).is_none() {
             manifest_stored[key] = json!("");
         }

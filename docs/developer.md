@@ -27,7 +27,7 @@
 
 ## 版本约定
 
-- `pica-cli` 内置协议版本：`PICA_VERSION=0.1.11`
+- `pica-cli` 内置协议版本：`PICA_VERSION=0.1.14`
 - `manifest` 的 `pica` 字段表示最低兼容版本：`pica = <min pica-cli version>`（可选，不写不检查）
 - `pica -U` 安装时会校验 `manifest` 的 `pica` 与 CLI 是否一致；不一致直接失败（非 0 退出）。
 
@@ -122,8 +122,8 @@ uname = <uname -m>
 
 ```
 app
-app@author
-app@author:version(branch)
+app:version
+app:version(branch)
 ```
 
 说明：
@@ -140,15 +140,14 @@ kmod = <opkg-package>
 
 # logical app identity (optional)
 appname = <logical app name>
-author = <publisher>
+origin = <project homepage or repository URL>
 version = <branch-or-version-tag>
 branch = <distribution branch>
 protocol = <luci|cli|...>
+luci_desc = <short LuCI plugin description>
 
 # optional
 app_i18n = luci-i18n-foo-{lang}
-opkg = <opkg-package>
-cmd = <relative-file-under-/usr/bin>
 
 # optional compatibility tag
 # luci = lua1
@@ -179,8 +178,9 @@ arch = all
 
 - `app/base/kmod`：安装清单（重复字段），决定需要安装哪些 opkg 包。
 - `app_i18n`：i18n 包名模板（`{lang}` 从配置 `i18n` 读取，默认 `zh-cn`；当前仅 `zh-cn` 时参与安装/卸载）。
+- `origin`：程序来源（建议填写仓库/项目 URL）。
+- `luci_desc`：LuCI 插件描述（区别于通用 `pkgdesc`）。
 - 卸载阶段按 `app` + `app_i18n` 映射执行 `opkg remove`（不再依赖 `opkg` 字段）
-- `cmd`：卸载阶段要删除的 `/usr/bin/<cmd>`（只删白名单，避免误删）
 
 ### OpenWrt 的“一个 app 多个 opkg 子包”
 
@@ -219,10 +219,10 @@ luci-i18n-myapp-zh-cn
 输出日志风格参考 Arch `makepkg`：
 
 ```
-==> Making package: hello 0.1.11-1 (openwrt-any)
-  -> Pica version: 0.1.11
+==> Making package: hello 0.1.14-1 (openwrt-any)
+  -> Pica version: 0.1.14
   -> Creating archive...
-==> Finished: /tmp/pica-test/hello-0.1.11-1-openwrt-any.pkg.tar.gz
+==> Finished: /tmp/pica-test/hello-0.1.14-1-openwrt-any.pkg.tar.gz
 ```
 
 ### 示例
@@ -313,7 +313,7 @@ pica -S
 #### 安装/更新（-U）
 
 ```
-pica -U ./hello-0.1.11-1-openwrt-any.pkg.tar.gz
+pica -U ./hello-0.1.14-1-openwrt-any.pkg.tar.gz
 
 #### 全量升级（-Syu）
 
@@ -352,7 +352,6 @@ pica -R myapp
 
 行为：
 
-- 只删除 `manifest` 中列出的 `cmd = ...`（白名单）
 - 只按 `manifest` 的 `app = ...` 和 `app_i18n = ...` 计算卸载列表（`i18n=zh-cn` 时包含语言包）
 - 不做依赖保护/依赖树分析（依赖策略交给 opkg 与用户）
 
@@ -360,7 +359,7 @@ pica -R myapp
 
 ```
 pica -Q
-hello	0.1.11-1	openwrt-any
+hello	0.1.14-1	openwrt-any
 ```
 
 ## 仓库协议（repo.json，最小实现）
@@ -398,15 +397,15 @@ repo-root/
   "packages": [
     {
       "pkgname": "hello",
-      "pkgver": "0.1.11",
+      "pkgver": "0.1.14",
       "pkgrel": "1",
       "appname": "hello",
-      "author": "demo",
+      "origin": "https://github.com/miaoermua/pica",
       "version": "rolling",
       "branch": "stable",
       "platform": "openwrt-any",
-      "pica": "0.1.11",
-      "filename": "hello-0.1.11-1-openwrt-any.pkg.tar.gz",
+      "pica": "0.1.14",
+      "filename": "hello-0.1.14-1-openwrt-any.pkg.tar.gz",
       "md5": "<md5>",
       "size": 465
     }
