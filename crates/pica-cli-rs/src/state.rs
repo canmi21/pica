@@ -236,3 +236,68 @@ fn now_unix_secs() -> u64 {
         .map(|duration| duration.as_secs())
         .unwrap_or(0)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn unique_tmp_path(name: &str) -> PathBuf {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        std::env::temp_dir().join(format!("pica-state-test-{name}-{now}-{}", std::process::id()))
+    }
+
+    #[test]
+    fn ensure_json_object_field_creates_and_validates() {
+        let mut value = json!({"schema": 1});
+        ensure_json_object_field(&mut value, "installed").expect("must create object field");
+        assert!(value.get("installed").is_some_and(Value::is_object));
+
+        let mut invalid = json!({"installed": []});
+        let err = ensure_json_object_field(&mut invalid, "installed").expect_err("must fail");
+        assert_eq!(err.code, DEFAULT_ERROR_CODE);
+    }
+
+    #[test]
+    fn db_find_installed_pkgname_by_selector_matches_version_and_branch() {
+        let db_file = unique_tmp_path("selector");
+        let db = json!({
+            "schema": 1,
+            "installed": {
+                "hello": {
+                    "manifest": {
+                        "pkgname": "hello",
+                        "appname": "hello-app",
+                        "version": "rolling",
+                        "branch": "stable",
+                        "pkgver": "1.2.3",
+                        "pkgrel": "4"
+                    }
+                }
+            }
+        });
+        write_json_atomic_pretty(&db_file, &db).expect("write db");
+
+        let selector = Selector::parse("hello-app:rolling(stable)");
+        let found = db_find_installed_pkgname_by_selector(&db_file, &selector)
+            .expect("query selector")
+            .expect("must match");
+        assert_eq!(found, "hello");
+
+        let selector_by_pkgver = Selector::parse("hello-app:1.2.3-4");
+        let found_by_pkgver = db_find_installed_pkgname_by_selector(&db_file, &selector_by_pkgver)
+            .expect("query selector by pkgver")
+            .expect("must match pkgver");
+        assert_eq!(found_by_pkgver, "hello");
+
+        let selector_miss = Selector::parse("hello-app:rolling(dev)");
+        let miss = db_find_installed_pkgname_by_selector(&db_file, &selector_miss)
+            .expect("query miss");
+        assert!(miss.is_none());
+
+        let _ = fs::remove_file(&db_file);
+    }
+}

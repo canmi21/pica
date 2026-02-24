@@ -196,3 +196,56 @@ fn now_unix_secs() -> u64 {
         .map(|duration| duration.as_secs())
         .unwrap_or(0)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn collect_declared_dependencies_merges_and_dedups() {
+        let index = json!({
+            "repos": {
+                "r1": {
+                    "data": {
+                        "packages": [
+                            {"manifest": {"base": ["busybox", "dnsmasq"], "kmod": "kmod-tun", "app": ["luci-app-foo", "busybox"]}},
+                            {"manifest": {"base": ["dnsmasq"], "app": "foo"}}
+                        ]
+                    }
+                },
+                "r2": {
+                    "data": {
+                        "packages": [
+                            {"manifest": {"app": ["bar", "foo"], "kmod": ["kmod-tun", "kmod-usb"]}}
+                        ]
+                    }
+                }
+            }
+        });
+
+        let deps = collect_declared_dependencies(&index);
+        assert_eq!(
+            deps,
+            vec![
+                "bar".to_string(),
+                "busybox".to_string(),
+                "dnsmasq".to_string(),
+                "foo".to_string(),
+                "kmod-tun".to_string(),
+                "kmod-usb".to_string(),
+                "luci-app-foo".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn append_dep_list_ignores_empty_and_non_string() {
+        let mut out = Vec::new();
+        append_dep_list(&mut out, Some(&json!(["a", " ", 1, "b"])));
+        append_dep_list(&mut out, Some(&json!(" c ")));
+        append_dep_list(&mut out, Some(&json!(null)));
+        append_dep_list(&mut out, Some(&json!(1)));
+
+        assert_eq!(out, vec!["a".to_string(), "b".to_string(), "c".to_string()]);
+    }
+}

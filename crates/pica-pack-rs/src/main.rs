@@ -467,3 +467,66 @@ fn collect_archs(roots: &[&Path], platform: &str) -> PicaResult<Vec<String>> {
     }
     Ok(archs.into_iter().collect())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn unique_tmp_dir(name: &str) -> PathBuf {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let dir = std::env::temp_dir().join(format!("pica-pack-test-{name}-{now}-{}", std::process::id()));
+        fs::create_dir_all(&dir).expect("create tmp dir");
+        dir
+    }
+
+    #[test]
+    fn matrix_detection_and_collection_work() {
+        let root = unique_tmp_dir("matrix");
+        let binary = root.join("binary");
+        fs::create_dir_all(binary.join("mt7621").join("all")).expect("mkdir binary mt7621/all");
+        fs::create_dir_all(binary.join("mt7621").join("arm")).expect("mkdir binary mt7621/arm");
+        fs::create_dir_all(binary.join("x86").join("all")).expect("mkdir binary x86/all");
+
+        assert!(has_platform_arch_matrix(&binary));
+
+        let platforms = collect_platforms(&[binary.as_path()]).expect("collect platforms");
+        assert_eq!(platforms, vec!["mt7621".to_string(), "x86".to_string()]);
+
+        let archs = collect_archs(&[binary.as_path()], "mt7621").expect("collect archs");
+        assert_eq!(archs, vec!["all".to_string(), "arm".to_string()]);
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn rewrite_manifest_for_build_replaces_runtime_fields() {
+        let root = unique_tmp_dir("manifest");
+        let source = root.join("manifest.src");
+        let target = root.join("manifest.dst");
+
+        fs::write(
+            &source,
+            "pkgname = hello\nplatform = old\narch = old\npkgver = 0.0.1\npkgrel = 1\nsize = 1\nbuilddate = 1\n",
+        )
+        .expect("write source manifest");
+
+        rewrite_manifest_for_build(&source, &target, "1.2.3", "4", "all", "arm64")
+            .expect("rewrite manifest");
+
+        let out = fs::read_to_string(&target).expect("read target manifest");
+        assert!(out.contains("pkgname = hello"));
+        assert!(out.contains("pkgver = 1.2.3"));
+        assert!(out.contains("pkgrel = 4"));
+        assert!(out.contains("platform = all"));
+        assert!(out.contains("arch = arm64"));
+        assert!(out.contains("builddate = "));
+        assert!(!out.contains("size = 1"));
+        assert!(!out.contains("platform = old"));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+}

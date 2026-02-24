@@ -499,29 +499,25 @@ pub(crate) fn install_ipk_dir(label: &str, dir: &Path) -> CliResult<()> {
 }
 
 pub(crate) fn prompt_yn(question: &str, default_yes: bool) -> bool {
-    use std::io::{self, Read, Write};
+    use std::io::{self, BufRead, Write};
 
     let hint = if default_yes { "[Y/n]" } else { "[y/N]" };
     eprint!("{question} {hint} ");
     let _ = io::stderr().flush();
 
     let mut input = String::new();
-    let mut stdin = io::stdin();
-    if stdin.read_to_string(&mut input).is_ok() {
-        let answer = input
-            .lines()
-            .next()
-            .unwrap_or("")
-            .trim()
-            .to_ascii_lowercase();
-        match answer.as_str() {
-            "" => default_yes,
-            "y" | "yes" => true,
-            "n" | "no" => false,
-            _ => default_yes,
-        }
-    } else {
-        default_yes
+    let stdin = io::stdin();
+    let mut handle = stdin.lock();
+    if handle.read_line(&mut input).is_err() {
+        return default_yes;
+    }
+
+    let answer = input.trim().to_ascii_lowercase();
+    match answer.as_str() {
+        "" => default_yes,
+        "y" | "yes" => true,
+        "n" | "no" => false,
+        _ => default_yes,
     }
 }
 
@@ -672,4 +668,63 @@ pub(crate) fn manifest_get_scalar(value: &Value, key: &str) -> String {
         .and_then(Value::as_str)
         .map(ToString::to_string)
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_uname_maps_common_values() {
+        assert_eq!(normalize_uname("x86_64"), "amd64");
+        assert_eq!(normalize_uname("aarch64"), "arm64");
+        assert_eq!(normalize_uname("mips"), "mips");
+    }
+
+    #[test]
+    fn reorder_app_list_moves_luci_and_i18n_last() {
+        let input = vec![
+            "luci-i18n-foo-zh-cn".to_string(),
+            "foo-core".to_string(),
+            "luci-app-foo".to_string(),
+            "foo-helper".to_string(),
+        ];
+
+        let output = reorder_app_list(input);
+        assert_eq!(
+            output,
+            vec![
+                "foo-core".to_string(),
+                "foo-helper".to_string(),
+                "luci-app-foo".to_string(),
+                "luci-i18n-foo-zh-cn".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn pkg_list_diff_added_returns_only_new_items() {
+        let before = vec!["a".to_string(), "b".to_string()];
+        let after = vec!["a".to_string(), "b".to_string(), "c".to_string()];
+
+        let added = pkg_list_diff_added(&before, &after);
+        assert_eq!(added, vec!["c".to_string()]);
+    }
+
+    #[test]
+    fn manifest_helpers_support_scalar_and_array() {
+        let value = json!({
+            "app": ["foo", "bar"],
+            "single": "baz",
+            "num": 1
+        });
+
+        assert_eq!(manifest_get_array(&value, "app"), vec!["foo", "bar"]);
+        assert_eq!(manifest_get_array(&value, "single"), vec!["baz"]);
+        assert!(manifest_get_array(&value, "num").is_empty());
+
+        assert_eq!(manifest_get_scalar(&value, "single"), "baz");
+        assert_eq!(manifest_get_scalar(&value, "app"), "");
+        assert_eq!(manifest_get_scalar(&value, "missing"), "");
+    }
 }
