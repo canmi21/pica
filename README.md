@@ -2,6 +2,8 @@
 
 Pica Is a Compact Archiver - Pica 喜鹊是一款紧凑型打包器
 
+![rust](https://ziadoua.github.io/m3-Markdown-Badges/badges/Rust/rust1.svg)
+
 该名字继承自 Wine 递归浪漫，简单紧凑而不落后，以及运用 Arch 系包管理器相似的滚动更新机制。
 
 目前支持双版（Rust & Bash），后续可能淘汰掉 Bash 版本以便维护。
