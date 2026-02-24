@@ -78,12 +78,7 @@ impl Manifest {
         let appname = self.get_first("appname").chars().collect::<String>();
 
         let appname = if appname.is_empty() {
-            let pkgname = self.get_first("pkgname");
-            if pkgname.is_empty() {
-                fallback_pkgname.to_string()
-            } else {
-                pkgname
-            }
+            fallback_pkgname.to_string()
         } else {
             appname
         };
@@ -115,12 +110,7 @@ impl Manifest {
 
     pub fn with_selector_defaults(mut self, fallback_pkgname: &str) -> Self {
         if let Some(obj) = self.value.as_object_mut() {
-            if obj.get("appname").is_none() {
-                obj.insert(
-                    "appname".to_string(),
-                    Value::String(fallback_pkgname.to_string()),
-                );
-            }
+            let _ = fallback_pkgname;
             for key in ["branch", "protocol"] {
                 if obj.get(key).is_none() {
                     obj.insert(key.to_string(), Value::String(String::new()));

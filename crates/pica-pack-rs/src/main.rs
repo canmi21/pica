@@ -112,6 +112,7 @@ fn main_build(staging_dir: &Path, outdir: Option<PathBuf>) -> PicaResult<()> {
     let manifest = Manifest::from_file(&manifest_file)?;
 
     let pkgname = manifest.require_non_empty("pkgname")?;
+    let _appname = manifest.require_non_empty("appname")?;
     let pkgver = manifest.require_non_empty("pkgver")?;
     let _pkg_os = manifest.require_non_empty("os")?;
     let mut pkgrel = manifest.get_first("pkgrel");
@@ -624,7 +625,7 @@ mod tests {
         fs::write(root.join("cmd").join("install"), "#!/bin/sh\nexit 0\n").expect("write cmd");
         fs::write(
             root.join("manifest"),
-            "pkgname = hello\npkgver = 1.0.0\npkgrel = 1\nplatform = amd64\narch = x86_64\n",
+            "pkgname = hello\nappname = hello\npkgver = 1.0.0\npkgrel = 1\nplatform = amd64\narch = x86_64\n",
         )
         .expect("write manifest");
 

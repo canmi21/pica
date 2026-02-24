@@ -309,6 +309,7 @@ pub fn install_pkgfile(app: &mut App, pkgfile: &Path, selector: Option<String>) 
         .map_err(|err| CliError::new(E_MANIFEST_INVALID, format!("invalid manifest: {err}")))?;
 
     let pkgname = required_manifest_field(&manifest, "pkgname")?;
+    let _appname = required_manifest_field(&manifest, "appname")?;
     let pica_required = manifest.get_first("pica");
     let pkgver = required_manifest_field(&manifest, "pkgver")?;
     let pkgrel = manifest.get_first("pkgrel");
@@ -555,9 +556,6 @@ pub fn install_pkgfile(app: &mut App, pkgfile: &Path, selector: Option<String>) 
     let mut manifest_stored = manifest.value.clone();
     if manifest_stored.get("source").is_none() {
         manifest_stored["source"] = json!("pica");
-    }
-    if manifest_stored.get("appname").is_none() {
-        manifest_stored["appname"] = json!(pkgname.clone());
     }
     if manifest_stored.get("url").is_none() {
         let origin = manifest_stored

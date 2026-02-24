@@ -30,11 +30,6 @@ pub fn report_set_install_result(
     ensure_json_object_field(&mut report, "reports")?;
 
     let appname = manifest_get_first(manifest, "appname");
-    let appname = if appname.is_empty() {
-        manifest_get_first(manifest, "pkgname")
-    } else {
-        appname
-    };
 
     let program_url = {
         let value = manifest_get_first(manifest, "url");
