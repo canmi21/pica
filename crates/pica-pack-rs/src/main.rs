@@ -113,6 +113,7 @@ fn main_build(staging_dir: &Path, outdir: Option<PathBuf>) -> PicaResult<()> {
 
     let pkgname = manifest.require_non_empty("pkgname")?;
     let pkgver = manifest.require_non_empty("pkgver")?;
+    let _pkg_os = manifest.require_non_empty("os")?;
     let mut pkgrel = manifest.get_first("pkgrel");
     let mut platform = manifest.get_first("platform");
     let mut arch = manifest.get_first("arch");
@@ -612,6 +613,23 @@ mod tests {
         assert!(out.contains("platform = all"));
         assert!(out.contains("arch = all"));
         assert!(!out.contains("platform = old"));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn main_build_requires_os_field() {
+        let root = unique_tmp_dir("missing-os");
+        fs::create_dir_all(root.join("cmd")).expect("mkdir cmd");
+        fs::write(root.join("cmd").join("install"), "#!/bin/sh\nexit 0\n").expect("write cmd");
+        fs::write(
+            root.join("manifest"),
+            "pkgname = hello\npkgver = 1.0.0\npkgrel = 1\nplatform = amd64\narch = x86_64\n",
+        )
+        .expect("write manifest");
+
+        let err = main_build(&root, Some(root.join("out"))).expect_err("missing os must fail");
+        assert!(err.to_string().contains("manifest missing os"));
 
         let _ = fs::remove_dir_all(&root);
     }

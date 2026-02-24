@@ -5,4 +5,4 @@ pub mod repo;
 pub mod selector;
 pub mod version;
 
-pub const PICA_VERSION: &str = "0.1.36";
+pub const PICA_VERSION: &str = "0.1.37";
