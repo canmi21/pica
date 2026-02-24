@@ -68,6 +68,12 @@ pub fn remove_pkg(app: &mut App, pkgname: &str) -> CliResult<()> {
         let _ = fs::remove_file(env_file);
     }
 
+    let src_dir = Path::new("/usr/lib/pica/src").join(pkgname);
+    if src_dir.is_dir() {
+        app.log_info(format!("removing src dir: {}", src_dir.display()));
+        let _ = fs::remove_dir_all(src_dir);
+    }
+
     db_del_installed(&app.paths.db_file, pkgname)?;
     app.log_info("Transaction completed");
     Ok(())

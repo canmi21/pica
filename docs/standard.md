@@ -37,12 +37,14 @@
 - `cmd/`（必需，目录）
 - `binary/`（可选，目录）
 - `depend/`（可选，目录；用于放 pica 封装的依赖 ipk）
+- `src/`（可选，目录；用于放非 ipk 的资源/原始文件）
 
 语义：
 
 - `cmd/`：要安装到 `/usr/bin/` 的脚本/可执行文件。
 - `binary/`：应用本体（或其 opkg 子包）对应的 `.ipk` 资源。
 - `depend/`：可选；基础依赖的 `.ipk` 资源（允许只提供部分，交由 opkg 基于依赖信息补全）。
+- `src/`：可选；生命周期脚本需要的源码/模板/静态资源，安装时复制到 `/usr/lib/pica/src/<pkgname>/`。
 
 `binary/` 推荐结构（多变体）：
 
@@ -56,7 +58,7 @@ depend/<platform>/<arch>/*.ipk
 ```
 ```
 
-打包器会把每个 `<platform>/<arch>` 组合单独生成一个 pica 包，并在产物中只保留对应组合的 `binary/` 与 `depend/`（若存在）。
+打包器会把每个 `<platform>/<arch>` 组合单独生成一个 pica 包，并在产物中只保留对应组合的 `binary/` 与 `depend/`（若存在）；`src/`（若存在）会原样打入每个变体包。
 
 ## pica-pack 输出目录约定
 
@@ -319,6 +321,7 @@ luci = lua1
 - `pkgmgr` 用于声明包管理后端：`opkg`（默认）或 `none`（仅生命周期脚本，不走包管理器安装/卸载）。
 - 当 `pkgmgr = opkg` 时：按 `app/base/kmod` 安装、按 `app` + `app_i18n`（`i18n=zh-cn`）卸载。
 - 当 `pkgmgr = none` 时：跳过包管理器安装/卸载，仅执行 `cmd_install/cmd_update/cmd_remove` 与 `cmd/` 文件部署。
+- 若包内存在 `src/`：安装阶段复制到 `/usr/lib/pica/src/<pkgname>/`，卸载阶段清理该目录。
 - `cmd_install/cmd_update/cmd_remove` 是生命周期脚本（包内路径，一般在 `cmd/` 下）。
 
 - `type` 允许声明应用形态标签，便于 pica 在安装阶段做额外兼容检查。

@@ -14,7 +14,7 @@ use std::process::{self, Command};
 fn usage() {
     println!(
         "Usage:\n  pica-pack-rs build <staging_dir> [--outdir DIR]\n\
-\nstaging_dir must contain:\n  - manifest\n  - cmd/\n  - binary/ is optional\n  - depend/ is optional\n  - LICENSE is optional\n\
+\nstaging_dir must contain:\n  - manifest\n  - cmd/\n  - binary/ is optional\n  - src/ is optional\n  - depend/ is optional\n  - LICENSE is optional\n\
 \nIf binary/ exists, the recommended layout is:\n  binary/<platform>/<arch>/*.ipk\n\
 \nIf depend/ exists, the recommended layout is:\n  depend/<platform>/<arch>/*.ipk\n\
 \nWhen such layout is present, pica-pack-rs will build one package per\n<platform>/<arch> combination.\n\
@@ -290,6 +290,11 @@ fn build_one(req: BuildRequest<'_>) -> PicaResult<()> {
         }
     }
 
+    let src_src = req.staging_dir.join("src");
+    if src_src.is_dir() {
+        copy_dir_recursive(&src_src, &tmpdir.join("src"))?;
+    }
+
     let license_src = req.staging_dir.join("LICENSE");
     if license_src.is_file() {
         fs::copy(&license_src, tmpdir.join("LICENSE"))?;
@@ -301,6 +306,9 @@ fn build_one(req: BuildRequest<'_>) -> PicaResult<()> {
     }
     if tmpdir.join("depend").is_dir() {
         tar_items.push("depend".to_string());
+    }
+    if tmpdir.join("src").is_dir() {
+        tar_items.push("src".to_string());
     }
     if tmpdir.join("LICENSE").is_file() {
         tar_items.push("LICENSE".to_string());

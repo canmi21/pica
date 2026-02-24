@@ -69,11 +69,13 @@
 manifest
 cmd/
 binary/   (optional)
+src/      (optional)
 ```
 
 - `manifest`：包元数据（Arch-like `key = value` 文本）
 - `cmd/`：必需，安装到 `/usr/bin/` 的脚本/可执行文件
 - `binary/`：可选，通常放 `.ipk` 或其他二进制资源；纯脚本包可以没有该目录
+- `src/`：可选，放非 ipk 的源文件/脚本资源；安装时会复制到 `/usr/lib/pica/src/<pkgname>/`
 
 `binary/` 推荐布局（多变体 ipk）：
 
@@ -224,6 +226,7 @@ luci-i18n-myapp-zh-cn
 
   # optional
   <staging_dir>/binary/
+  <staging_dir>/src/
 ```
 
 输出日志风格参考 Arch `makepkg`：
@@ -334,7 +337,7 @@ pica -Syu
 
 行为：
 
-- 解包并校验：必须包含 `manifest/cmd/binary`，`depend` 为可选
+- 解包并校验：必须包含 `manifest/cmd`；`binary/depend/src` 为可选
   - 校验 `pica` 协议版本一致
   - `platform`：仅展示，不作为安装门槛
   - 校验 `uname`（若提供）：优先匹配（`amd64/arm64` 与 `x86_64/aarch64` 做别名兼容）
@@ -344,6 +347,7 @@ pica -Syu
 - 再处理 `base`：软件源有则可选择走软件源；软件源没有则必须使用包内 `depend/*.ipk`，否则失败。
 - 最后处理 `app`：软件源有则可选择走软件源；软件源没有则必须使用包内 `binary/*.ipk`，否则失败。
 - 安装命令：将 `cmd/` 复制到 `/usr/bin/`
+- 若包内存在 `src/`：复制到 `/usr/lib/pica/src/<pkgname>/`，供生命周期脚本读取
 - 写入本地安装数据库：`/var/lib/pica/db.json`
 - 写入安装审计报告：`/var/lib/pica/install-report.json`
   - 安装前依赖可用性检查（kmod/base/app）

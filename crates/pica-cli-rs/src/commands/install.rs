@@ -533,6 +533,14 @@ pub fn install_pkgfile(app: &mut App, pkgfile: &Path, selector: Option<String>) 
         }
     }
 
+    let src_dir = tmpdir.join("src");
+    if src_dir.is_dir() {
+        let src_target_dir = Path::new("/usr/lib/pica/src").join(&pkgname);
+        ensure_dir(&src_target_dir)?;
+        copy_dir_recursive(&src_dir, &src_target_dir)?;
+        installed_files.push(src_target_dir.display().to_string());
+    }
+
     let env_file = tmpdir.join("cmd/.env");
     if env_file.is_file() {
         ensure_dir(Path::new("/etc/pica/env.d"))?;

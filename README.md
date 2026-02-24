@@ -48,6 +48,8 @@ Pica Is a Compact Archiver - Pica 喜鹊是一款紧凑型打包器
 
 说明：当前核心实现为 Rust（`crates/pica-cli-rs` / `crates/pica-pack-rs`），Bash 版本已归档到 `legacy/`（不再作为核心维护）。更完整的包标准/字段约定见 `docs/standard.md`。
 
+补充：`pkgmgr=none` 的生命周期包可使用 `src/` 携带原始资源，安装时会落地到 `/usr/lib/pica/src/<pkgname>/`，供 `cmd_install/cmd_update/cmd_remove` 使用。
+
 ## 配置文件
 
 默认配置文件：`/etc/pica/pica.json`（首次运行会自动创建）。
