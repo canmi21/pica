@@ -122,6 +122,7 @@ pub fn install_app_via_opkg(app: &mut App, selector: &str) -> CliResult<()> {
         "platform": detect_platform(),
         "arch": "all",
         "source": "opkg",
+        "pkgmgr": "opkg",
         "opkg": to_install,
     });
 
@@ -275,6 +276,7 @@ pub fn install_pkgfile(app: &mut App, pkgfile: &Path, selector: Option<String>) 
     let pkg_arch = required_manifest_field(&manifest, "arch")?;
     let pkg_uname = manifest.get_first("uname");
     let pkg_luci = manifest.get_first("luci");
+    let pkgmgr = manifest.get_first("pkgmgr");
 
     let cmd_install = manifest.get_scalar("cmd_install");
     let cmd_update = manifest.get_scalar("cmd_update");
@@ -318,6 +320,18 @@ pub fn install_pkgfile(app: &mut App, pkgfile: &Path, selector: Option<String>) 
         }
     }
 
+    let pkgmgr = if pkgmgr.is_empty() {
+        "opkg".to_string()
+    } else {
+        pkgmgr
+    };
+    if pkgmgr != "opkg" && pkgmgr != "none" {
+        return Err(CliError::new(
+            DEFAULT_ERROR_CODE,
+            format!("invalid pkgmgr value: {pkgmgr} (supported: opkg, none)"),
+        ));
+    }
+
     if manifest.has_type("luci") {
         if pkg_luci.is_empty() {
             return Err(CliError::new(
@@ -350,6 +364,7 @@ pub fn install_pkgfile(app: &mut App, pkgfile: &Path, selector: Option<String>) 
     app.log_info(format!("  version: {pkgver_display}"));
     app.log_info(format!("  platform: {pkg_platform} (host: {host_platform})"));
     app.log_info(format!("  arch: {pkg_arch}"));
+    app.log_info(format!("  pkgmgr: {pkgmgr}"));
     if !pkg_uname.is_empty() {
         app.log_info(format!("  uname: {pkg_uname} (host: {host_uname_raw})"));
     }
@@ -360,8 +375,6 @@ pub fn install_pkgfile(app: &mut App, pkgfile: &Path, selector: Option<String>) 
     if !pkg_luci.is_empty() {
         app.log_info(format!("  luci: {pkg_luci}"));
     }
-
-    opkg_update_ignore();
 
     let depend_dir = tmpdir.join("depend");
     let binary_dir = tmpdir.join("binary");
@@ -374,29 +387,41 @@ pub fn install_pkgfile(app: &mut App, pkgfile: &Path, selector: Option<String>) 
     }
     app_list = reorder_app_list(app_list);
 
-    let precheck = build_precheck_report(&manifest, &depend_dir, &binary_dir, &app_list);
-    precheck_assert_no_missing(&precheck)?;
+    let mut precheck = json!({"kmod": [], "base": [], "app": []});
+    let mut tx_added = Vec::new();
+    let mut app_added = Vec::new();
 
-    let snap_before_tx = opkg_snapshot_installed();
+    if pkgmgr == "opkg" {
+        opkg_update_ignore();
 
-    for dep in manifest.get_array("kmod") {
-        if dep.is_empty() {
-            continue;
+        precheck = build_precheck_report(&manifest, &depend_dir, &binary_dir, &app_list);
+        precheck_assert_no_missing(&precheck)?;
+
+        let snap_before_tx = opkg_snapshot_installed();
+
+        for dep in manifest.get_array("kmod") {
+            if dep.is_empty() {
+                continue;
+            }
+            if !opkg_is_installed(&dep) {
+                opkg_install_pkg("kmod", &dep)?;
+            }
         }
-        if !opkg_is_installed(&dep) {
-            opkg_install_pkg("kmod", &dep)?;
-        }
+
+        let base_list = manifest.get_array("base");
+        let has_depend_dir = depend_dir.is_dir();
+        install_via_feeds_or_ipk(app, "base", &base_list, &depend_dir, has_depend_dir)?;
+
+        let snap_before_app = opkg_snapshot_installed();
+
+        install_via_feeds_or_ipk(app, "app", &app_list, &binary_dir, true)?;
+
+        let snap_after_app = opkg_snapshot_installed();
+        let snap_after_tx = opkg_snapshot_installed();
+
+        tx_added = pkg_list_diff_added(&snap_before_tx, &snap_after_tx);
+        app_added = pkg_list_diff_added(&snap_before_app, &snap_after_app);
     }
-
-    let base_list = manifest.get_array("base");
-    let has_depend_dir = depend_dir.is_dir();
-    install_via_feeds_or_ipk(app, "base", &base_list, &depend_dir, has_depend_dir)?;
-
-    let snap_before_app = opkg_snapshot_installed();
-
-    install_via_feeds_or_ipk(app, "app", &app_list, &binary_dir, true)?;
-
-    let snap_after_app = opkg_snapshot_installed();
 
     if is_upgrade {
         run_hook(app, &tmpdir, &cmd_update, "update")?;
@@ -441,11 +466,6 @@ pub fn install_pkgfile(app: &mut App, pkgfile: &Path, selector: Option<String>) 
         })?;
     }
 
-    let snap_after_tx = opkg_snapshot_installed();
-
-    let tx_added = pkg_list_diff_added(&snap_before_tx, &snap_after_tx);
-    let app_added = pkg_list_diff_added(&snap_before_app, &snap_after_app);
-
     report_set_install_result(
         &app.paths,
         &pkgname,
@@ -463,7 +483,18 @@ pub fn install_pkgfile(app: &mut App, pkgfile: &Path, selector: Option<String>) 
     if manifest_stored.get("appname").is_none() {
         manifest_stored["appname"] = json!(pkgname.clone());
     }
-    for key in ["version", "branch", "protocol", "origin", "luci_desc"] {
+    if manifest_stored.get("url").is_none() {
+        let origin = manifest_stored
+            .get("origin")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        manifest_stored["url"] = json!(origin);
+    }
+    if manifest_stored.get("pkgmgr").is_none() {
+        manifest_stored["pkgmgr"] = json!("opkg");
+    }
+    for key in ["version", "branch", "protocol", "url", "luci_url", "luci_desc", "pkgmgr"] {
         if manifest_stored.get(key).is_none() {
             manifest_stored[key] = json!("");
         }

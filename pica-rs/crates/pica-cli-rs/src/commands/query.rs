@@ -68,9 +68,18 @@ pub fn query_info(app: &mut App, pkgname: &str) -> CliResult<()> {
         "AppName         : {}",
         manifest_get_first(manifest, "appname")
     );
+    let program_url = {
+        let value = manifest_get_first(manifest, "url");
+        if value.is_empty() {
+            manifest_get_first(manifest, "origin")
+        } else {
+            value
+        }
+    };
+    println!("Program URL     : {}", program_url);
     println!(
-        "Origin          : {}",
-        manifest_get_first(manifest, "origin")
+        "LuCI URL        : {}",
+        manifest_get_first(manifest, "luci_url")
     );
     println!(
         "Version Tag     : {}",

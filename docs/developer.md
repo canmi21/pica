@@ -27,7 +27,7 @@
 
 ## 版本约定
 
-- `pica-cli` 内置协议版本：`PICA_VERSION=0.1.14`
+- `pica-cli` 内置协议版本：`PICA_VERSION=0.1.16`
 - `manifest` 的 `pica` 字段表示最低兼容版本：`pica = <min pica-cli version>`（可选，不写不检查）
 - `pica -U` 安装时会校验 `manifest` 的 `pica` 与 CLI 是否一致；不一致直接失败（非 0 退出）。
 
@@ -140,11 +140,13 @@ kmod = <opkg-package>
 
 # logical app identity (optional)
 appname = <logical app name>
-origin = <project homepage or repository URL>
+url = <project homepage or repository URL>
+luci_url = <LuCI plugin homepage or repository URL>
 version = <branch-or-version-tag>
 branch = <distribution branch>
 protocol = <luci|cli|...>
 luci_desc = <short LuCI plugin description>
+pkgmgr = <opkg|none>
 
 # optional
 app_i18n = luci-i18n-foo-{lang}
@@ -178,9 +180,11 @@ arch = all
 
 - `app/base/kmod`：安装清单（重复字段），决定需要安装哪些 opkg 包。
 - `app_i18n`：i18n 包名模板（`{lang}` 从配置 `i18n` 读取，默认 `zh-cn`；当前仅 `zh-cn` 时参与安装/卸载）。
-- `origin`：程序来源（建议填写仓库/项目 URL）。
+- `url`：程序来源（建议填写仓库/项目 URL）。
+- `luci_url`：LuCI 插件来源（可选；仅 LuCI 包建议填写）。
 - `luci_desc`：LuCI 插件描述（区别于通用 `pkgdesc`）。
-- 卸载阶段按 `app` + `app_i18n` 映射执行 `opkg remove`（不再依赖 `opkg` 字段）
+- `pkgmgr`：包管理后端，`opkg`（默认）或 `none`（仅生命周期脚本）。
+- `pkgmgr=opkg` 时按 `app` + `app_i18n` 映射执行卸载；`pkgmgr=none` 时跳过包管理器卸载。
 
 ### OpenWrt 的“一个 app 多个 opkg 子包”
 
@@ -219,10 +223,10 @@ luci-i18n-myapp-zh-cn
 输出日志风格参考 Arch `makepkg`：
 
 ```
-==> Making package: hello 0.1.14-1 (openwrt-any)
-  -> Pica version: 0.1.14
+==> Making package: hello 0.1.16-1 (openwrt-any)
+  -> Pica version: 0.1.16
   -> Creating archive...
-==> Finished: /tmp/pica-test/hello-0.1.14-1-openwrt-any.pkg.tar.gz
+==> Finished: /tmp/pica-test/hello-0.1.16-1-openwrt-any.pkg.tar.gz
 ```
 
 ### 示例
@@ -313,7 +317,7 @@ pica -S
 #### 安装/更新（-U）
 
 ```
-pica -U ./hello-0.1.14-1-openwrt-any.pkg.tar.gz
+pica -U ./hello-0.1.16-1-openwrt-any.pkg.tar.gz
 
 #### 全量升级（-Syu）
 
@@ -359,7 +363,7 @@ pica -R myapp
 
 ```
 pica -Q
-hello	0.1.14-1	openwrt-any
+hello	0.1.16-1	openwrt-any
 ```
 
 ## 仓库协议（repo.json，最小实现）
@@ -397,15 +401,17 @@ repo-root/
   "packages": [
     {
       "pkgname": "hello",
-      "pkgver": "0.1.14",
+      "pkgver": "0.1.16",
       "pkgrel": "1",
       "appname": "hello",
-      "origin": "https://github.com/miaoermua/pica",
+      "url": "https://github.com/miaoermua/pica",
+      "luci_url": "https://github.com/openwrt/luci/tree/master/applications/luci-app-hello",
+      "pkgmgr": "opkg",
       "version": "rolling",
       "branch": "stable",
       "platform": "openwrt-any",
-      "pica": "0.1.14",
-      "filename": "hello-0.1.14-1-openwrt-any.pkg.tar.gz",
+      "pica": "0.1.16",
+      "filename": "hello-0.1.16-1-openwrt-any.pkg.tar.gz",
       "md5": "<md5>",
       "size": 465
     }

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PICA_VERSION="0.1.14"
+PICA_VERSION="0.1.16"
 
 PICA_ETC_DIR="${PICA_ETC_DIR:-/etc/pica}"
 PICA_CONF_FILE="${PICA_CONF_FILE:-${PICA_ETC_DIR}/pica.json}"
@@ -416,7 +416,8 @@ JSON
       package: {
         pkgname: ($manifest.pkgname // ""),
         appname: ($manifest.appname // $manifest.pkgname // ""),
-        origin: ($manifest.origin // ""),
+        url: (($manifest.url // $manifest.origin) // ""),
+        luci_url: ($manifest.luci_url // ""),
         version: ($manifest.version // ""),
         branch: ($manifest.branch // ""),
         protocol: ($manifest.protocol // ""),
@@ -1242,8 +1243,9 @@ install_app_via_opkg() {
       --arg platform "$(detect_platform)" \
       --arg arch "all" \
       --arg source "opkg" \
+      --arg pkgmgr "opkg" \
       --argjson opkgs "$(printf '%s\n' "${to_install[@]}" | jq -R . | jq -s .)" \
-      '{pkgname:$pkgname, appname:$appname, version:$version, branch:$branch, pkgver:$pkgver, platform:$platform, arch:$arch, source:$source, app:$opkgs}'
+      '{pkgname:$pkgname, appname:$appname, version:$version, branch:$branch, pkgver:$pkgver, platform:$platform, arch:$arch, source:$source, pkgmgr:$pkgmgr, app:$opkgs}'
   )"
 
   db_set_installed "$app" "$manifest_json" "opkg"
@@ -1327,6 +1329,9 @@ install_pkgfile() {
   pkg_luci="$(manifest_get_first "$manifest_json" luci)"
   local pkg_type
   pkg_type="$(manifest_get_first "$manifest_json" type)"
+  local pkgmgr
+  pkgmgr="$(manifest_get_first "$manifest_json" pkgmgr)"
+  [[ -n "$pkgmgr" ]] || pkgmgr="opkg"
 
   local cmd_install cmd_update cmd_remove
   cmd_install="$(manifest_get_scalar "$manifest_json" cmd_install)"
@@ -1428,6 +1433,12 @@ install_pkgfile() {
     log_info "  luci: $pkg_luci"
   fi
 
+  case "$pkgmgr" in
+    opkg|none) ;;
+    *) die "invalid pkgmgr value: $pkgmgr (supported: opkg, none)" ;;
+  esac
+  log_info "  pkgmgr: $pkgmgr"
+
   # Mark this as a pica-installed package for auto update selection.
   manifest_json="$(jq --arg source "pica" '.source //= $source' <<<"$manifest_json")"
 
@@ -1437,7 +1448,9 @@ install_pkgfile() {
     | .version //= ""
     | .branch //= ""
     | .protocol //= ""
-    | .origin //= ""
+    | .pkgmgr //= "opkg"
+    | .url //= (.origin // "")
+    | .luci_url //= ""
     | .luci_desc //= ""
   ' <<<"$manifest_json")"
 
@@ -1451,7 +1464,9 @@ install_pkgfile() {
     echo "${template//\{lang\}/$lang}"
   }
 
-  opkg update >/dev/null 2>&1 || true
+  if [[ "$pkgmgr" == "opkg" ]]; then
+    opkg update >/dev/null 2>&1 || true
+  fi
 
   install_ipk_dir() {
     local label="$1"
@@ -1588,41 +1603,49 @@ install_pkgfile() {
   app_list="$(reorder_app_list "$app_list")"
 
   local precheck_json
-  precheck_json="$(build_precheck_report "$manifest_json" "$tmpdir/depend" "$tmpdir/binary" "$app_list")"
-  precheck_assert_no_missing "$precheck_json"
-
+  precheck_json='{"kmod":[],"base":[],"app":[]}'
   local snap_before_tx snap_before_app snap_after_app snap_after_tx
-  snap_before_tx="$(mktemp)"
-  snap_before_app="$(mktemp)"
-  snap_after_app="$(mktemp)"
-  snap_after_tx="$(mktemp)"
-  opkg_snapshot_installed "$snap_before_tx"
+  snap_before_tx=""
+  snap_before_app=""
+  snap_after_app=""
+  snap_after_tx=""
 
-  # kmod: hard requirement. Must be installable.
-  local kmod_list
-  kmod_list="$(manifest_get_array "$manifest_json" kmod || true)"
-  if [[ -n "$kmod_list" ]]; then
-    local dep
-    while IFS= read -r dep; do
-      [[ -z "$dep" ]] && continue
-      if ! opkg_is_installed "$dep"; then
-        opkg_install_pkg "kmod" "$dep"
-      fi
-    done <<<"$kmod_list"
+  if [[ "$pkgmgr" == "opkg" ]]; then
+    precheck_json="$(build_precheck_report "$manifest_json" "$tmpdir/depend" "$tmpdir/binary" "$app_list")"
+    precheck_assert_no_missing "$precheck_json"
+
+    snap_before_tx="$(mktemp)"
+    snap_before_app="$(mktemp)"
+    snap_after_app="$(mktemp)"
+    snap_after_tx="$(mktemp)"
+    opkg_snapshot_installed "$snap_before_tx"
+
+    # kmod: hard requirement. Must be installable.
+    local kmod_list
+    kmod_list="$(manifest_get_array "$manifest_json" kmod || true)"
+    if [[ -n "$kmod_list" ]]; then
+      local dep
+      while IFS= read -r dep; do
+        [[ -z "$dep" ]] && continue
+        if ! opkg_is_installed "$dep"; then
+          opkg_install_pkg "kmod" "$dep"
+        fi
+      done <<<"$kmod_list"
+    fi
+
+    # base: must be available via feeds or packaged depend/.
+    local base_list
+    base_list="$(manifest_get_array "$manifest_json" base || true)"
+    local has_depend_dir=0
+    [[ -d "$tmpdir/depend" ]] && has_depend_dir=1
+    install_via_feeds_or_ipk "base" "$base_list" "$tmpdir/depend" "$has_depend_dir"
+
+    opkg_snapshot_installed "$snap_before_app"
+
+    # app: must be available via feeds or packaged binary/.
+    install_via_feeds_or_ipk "app" "$app_list" "$tmpdir/binary" 1
+    opkg_snapshot_installed "$snap_after_app"
   fi
-
-  # base: must be available via feeds or packaged depend/.
-  local base_list
-  base_list="$(manifest_get_array "$manifest_json" base || true)"
-  local has_depend_dir=0
-  [[ -d "$tmpdir/depend" ]] && has_depend_dir=1
-  install_via_feeds_or_ipk "base" "$base_list" "$tmpdir/depend" "$has_depend_dir"
-
-  opkg_snapshot_installed "$snap_before_app"
-
-  # app: must be available via feeds or packaged binary/.
-  install_via_feeds_or_ipk "app" "$app_list" "$tmpdir/binary" 1
-  opkg_snapshot_installed "$snap_after_app"
 
   # lifecycle cmd scripts
   if [[ "$is_upgrade" -eq 1 ]]; then
@@ -1664,15 +1687,24 @@ install_pkgfile() {
     cp -f "$tmpdir/cmd/.env" "/etc/pica/env.d/${pkgname}.env"
   fi
 
-  opkg_snapshot_installed "$snap_after_tx"
   local tx_added_json app_added_json
-  tx_added_json="$(pkg_list_diff_added "$snap_before_tx" "$snap_after_tx" | jq -R . | jq -s .)"
-  app_added_json="$(pkg_list_diff_added "$snap_before_app" "$snap_after_app" | jq -R . | jq -s .)"
+  if [[ "$pkgmgr" == "opkg" ]]; then
+    opkg_snapshot_installed "$snap_after_tx"
+    tx_added_json="$(pkg_list_diff_added "$snap_before_tx" "$snap_after_tx" | jq -R . | jq -s .)"
+    app_added_json="$(pkg_list_diff_added "$snap_before_app" "$snap_after_app" | jq -R . | jq -s .)"
+  else
+    tx_added_json='[]'
+    app_added_json='[]'
+  fi
 
   report_set_install_result "$pkgname" "$selector" "$manifest_json" "$precheck_json" "$tx_added_json" "$app_added_json"
 
   db_set_installed "$pkgname" "$manifest_json" "$(readlink -f "$pkgfile" 2>/dev/null || echo "$pkgfile")"
-  rm -rf "$tmpdir" "$snap_before_tx" "$snap_before_app" "$snap_after_app" "$snap_after_tx"
+  rm -rf "$tmpdir"
+  [[ -n "$snap_before_tx" ]] && rm -f "$snap_before_tx"
+  [[ -n "$snap_before_app" ]] && rm -f "$snap_before_app"
+  [[ -n "$snap_after_app" ]] && rm -f "$snap_after_app"
+  [[ -n "$snap_after_tx" ]] && rm -f "$snap_after_tx"
   log_info "Transaction completed"
 }
 
@@ -1715,6 +1747,9 @@ remove_pkg() {
 
   local cmd_remove
   cmd_remove="$(manifest_get_scalar "$manifest_json" cmd_remove)"
+  local pkgmgr
+  pkgmgr="$(manifest_get_scalar "$manifest_json" pkgmgr)"
+  [[ -n "$pkgmgr" ]] || pkgmgr="opkg"
 
   log_info "Removing $pkgname..."
 
@@ -1735,14 +1770,18 @@ remove_pkg() {
     remove_list+="$(expand_lang_template "$app_i18n_template" "$lang")"$'\n'
   fi
 
-  while IFS= read -r opkg_name; do
-    [[ -z "$opkg_name" ]] && continue
-    log_info "removing opkg package: $opkg_name"
-    if ! out="$(opkg remove "$opkg_name" 2>&1)"; then
-      set_error_code E_OPKG_REMOVE
-      die "opkg remove failed: $opkg_name detail=[$out]"
-    fi
-  done < <(printf '%s' "$remove_list" | sed '/^$/d' | sort -u)
+  if [[ "$pkgmgr" == "opkg" ]]; then
+    while IFS= read -r opkg_name; do
+      [[ -z "$opkg_name" ]] && continue
+      log_info "removing opkg package: $opkg_name"
+      if ! out="$(opkg remove "$opkg_name" 2>&1)"; then
+        set_error_code E_OPKG_REMOVE
+        die "opkg remove failed: $opkg_name detail=[$out]"
+      fi
+    done < <(printf '%s' "$remove_list" | sed '/^$/d' | sort -u)
+  else
+    log_info "skip package-manager remove (pkgmgr=$pkgmgr)"
+  fi
 
   if [[ -f "/etc/pica/env.d/${pkgname}.env" ]]; then
     log_info "removing env: /etc/pica/env.d/${pkgname}.env"
@@ -1780,7 +1819,11 @@ query_info() {
   echo "Pkgver          : $(manifest_get_first "$manifest" pkgver)"
   echo "Pkgrel          : $(manifest_get_first "$manifest" pkgrel)"
   echo "AppName         : $(manifest_get_first "$manifest" appname)"
-  echo "Origin          : $(manifest_get_first "$manifest" origin)"
+  local program_url
+  program_url="$(manifest_get_first "$manifest" url)"
+  [[ -n "$program_url" ]] || program_url="$(manifest_get_first "$manifest" origin)"
+  echo "Program URL     : $program_url"
+  echo "LuCI URL        : $(manifest_get_first "$manifest" luci_url)"
   echo "Version Tag     : $(manifest_get_first "$manifest" version)"
   echo "Branch          : $(manifest_get_first "$manifest" branch)"
   echo "Protocol        : $(manifest_get_first "$manifest" protocol)"
@@ -2011,7 +2054,6 @@ main() {
       ;;
     -U)
       json_set_phase install
-      need_cmd opkg
       need_cmd tar
       [[ $# -ge 2 ]] || die "-U requires <pkgfile|url>"
       install_pkg_source "$2"
@@ -2019,7 +2061,6 @@ main() {
       ;;
     -R)
       json_set_phase remove
-      need_cmd opkg
       [[ $# -ge 2 ]] || die "-R requires <pkgname>"
       remove_pkg "$2"
       json_emit_success "-R" "$2"

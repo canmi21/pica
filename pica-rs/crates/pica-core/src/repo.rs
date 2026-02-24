@@ -26,7 +26,11 @@ pub struct RepoPackage {
     #[serde(default)]
     pub protocol: Option<String>,
     #[serde(default)]
+    pub url: Option<String>,
+    #[serde(default, alias = "origin")]
     pub origin: Option<String>,
+    #[serde(default)]
+    pub luci_url: Option<String>,
     #[serde(default)]
     pub luci_desc: Option<String>,
     #[serde(default)]

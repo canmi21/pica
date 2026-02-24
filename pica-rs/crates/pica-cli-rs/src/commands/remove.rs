@@ -22,6 +22,14 @@ pub fn remove_pkg(app: &mut App, pkgname: &str) -> CliResult<()> {
         .ok_or_else(|| CliError::new(DEFAULT_ERROR_CODE, format!("not installed: {pkgname}")))?;
 
     let cmd_remove = manifest_get_scalar(&manifest, "cmd_remove");
+    let pkgmgr = {
+        let value = manifest_get_scalar(&manifest, "pkgmgr");
+        if value.is_empty() {
+            "opkg".to_string()
+        } else {
+            value
+        }
+    };
 
     app.log_info(format!("Removing {pkgname}..."));
     run_cmd_install_tree(app, &format!("{pkgname}/{cmd_remove}"), "remove")?;
@@ -45,9 +53,13 @@ pub fn remove_pkg(app: &mut App, pkgname: &str) -> CliResult<()> {
         }
     }
 
-    for opkg_name in remove_set {
-        app.log_info(format!("removing opkg package: {opkg_name}"));
-        opkg_remove_pkg(&opkg_name)?;
+    if pkgmgr == "opkg" {
+        for opkg_name in remove_set {
+            app.log_info(format!("removing opkg package: {opkg_name}"));
+            opkg_remove_pkg(&opkg_name)?;
+        }
+    } else {
+        app.log_info(format!("skip package-manager remove (pkgmgr={pkgmgr})"));
     }
 
     let env_file = Path::new("/etc/pica/env.d").join(format!("{pkgname}.env"));

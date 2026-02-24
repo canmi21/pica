@@ -35,13 +35,23 @@ pub fn report_set_install_result(
         appname
     };
 
+    let program_url = {
+        let value = manifest_get_first(manifest, "url");
+        if value.is_empty() {
+            manifest_get_first(manifest, "origin")
+        } else {
+            value
+        }
+    };
+
     report["reports"][pkgname] = json!({
         "updated_at": now_unix_secs(),
         "selector": selector,
         "package": {
             "pkgname": manifest_get_first(manifest, "pkgname"),
             "appname": appname,
-            "origin": manifest_get_first(manifest, "origin"),
+            "url": program_url,
+            "luci_url": manifest_get_first(manifest, "luci_url"),
             "version": manifest_get_first(manifest, "version"),
             "branch": manifest_get_first(manifest, "branch"),
             "protocol": manifest_get_first(manifest, "protocol"),
