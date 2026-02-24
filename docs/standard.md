@@ -10,6 +10,13 @@
   - `-U` 安装/更新（install/update，类似 pacman -U）
   - `-R` 卸载（remove）
 
+## 归档类型与载荷边界
+
+- 当前唯一标准归档类型：`*.pkg.tar.gz`。
+- `*.apk` 目前不作为可直接安装归档；后续可能引入兼容能力（以版本发布说明为准）。
+- 在 OpenWrt 场景，`pkgmgr=opkg` 可结合 `src/` 分发非二进制资源（包括 `docker-compose` 相关文件）。
+- Pica 仅负责包分发、校验、生命周期脚本执行，不提供 Docker 管理服务。
+
 ## 包格式（.pkg.tar.gz）
 
 ### 文件名
@@ -322,6 +329,7 @@ luci = lua1
 - 当 `pkgmgr = opkg` 时：按 `app/base/kmod` 安装、按 `app` + `app_i18n`（`i18n=zh-cn`）卸载。
 - 当 `pkgmgr = none` 时：跳过包管理器安装/卸载，仅执行 `cmd_install/cmd_update/cmd_remove` 与 `cmd/` 文件部署。
 - 若包内存在 `src/`：安装阶段复制到 `/usr/lib/pica/src/<pkgname>/`，卸载阶段清理该目录。
+- `src/` 可用于携带脚本/模板/Compose 清单，但容器运行与编排策略由外部工具负责（不由 Pica 托管）。
 - `cmd_install/cmd_update/cmd_remove` 是生命周期脚本（包内路径，一般在 `cmd/` 下）。
 
 - `type` 允许声明应用形态标签，便于 pica 在安装阶段做额外兼容检查。

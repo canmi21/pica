@@ -193,6 +193,8 @@ arch = all
 - `luci_desc`：LuCI 插件描述（区别于通用 `pkgdesc`）。
 - `pkgmgr`：包管理后端，`opkg`（默认）或 `none`（仅生命周期脚本）。
 - `pkgmgr=opkg` 时按 `app` + `app_i18n` 映射执行卸载；`pkgmgr=none` 时跳过包管理器卸载。
+- `src/`：可承载未编译资源（脚本、模板、Compose 清单等），由生命周期脚本决定部署位置与方式。
+- 边界：Pica 不负责 Docker 管理，不提供 `dockerd`/`docker compose` 的托管与状态编排。
 
 ### OpenWrt 的“一个 app 多个 opkg 子包”
 
