@@ -2,10 +2,10 @@ use crate::{
     build_precheck_report, canonicalize_display, conf_get_i18n, copy_dir_recursive,
     detect_luci_variant, detect_opkg_arches, detect_platform, ensure_dir, ensure_dirs, install_via_feeds_or_ipk,
     make_temp_dir, manifest_get_first, normalize_uname, pkg_list_diff_added, pkgver_cmp_key,
-    pkgver_ge, precheck_assert_no_missing, reorder_app_list, required_manifest_field,
+    pkgver_ge, reorder_app_list, required_manifest_field,
     resolve_lang, run_hook, ver_ge, write_file_atomic, detect_os, App, CliError, CliResult, Manifest, Selector,
     E_CONFIG_INVALID, E_IO, E_MANIFEST_INVALID, E_PACKAGE_INVALID, E_PLATFORM_UNSUPPORTED,
-    E_REPO_INVALID, E_VERSION_INCOMPATIBLE, E_INTEGRITY_INVALID, PICA_VERSION,
+    E_REPO_INVALID, E_VERSION_INCOMPATIBLE, E_INTEGRITY_INVALID, E_RUNTIME, PICA_VERSION,
 };
 use crate::state::{
     db_find_installed_pkgname_by_selector, db_has_installed, db_set_installed, read_json_file,
@@ -37,6 +37,34 @@ impl Drop for TempDirGuard {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }
+}
+
+fn summarize_missing_precheck(precheck: &Value) -> Vec<String> {
+    let mut missing = Vec::new();
+
+    for (group, key) in [
+        (precheck.get("kmod"), "kmod"),
+        (precheck.get("base"), "base"),
+        (precheck.get("app"), "app"),
+    ] {
+        let Some(entries) = group.and_then(Value::as_array) else {
+            continue;
+        };
+
+        for entry in entries {
+            let status = entry.get("status").and_then(Value::as_str).unwrap_or("");
+            if status != "missing" {
+                continue;
+            }
+
+            let name = entry.get("name").and_then(Value::as_str).unwrap_or("");
+            if !name.is_empty() {
+                missing.push(format!("{key}:{name}"));
+            }
+        }
+    }
+
+    missing
 }
 
 pub fn install_app_auto(app: &mut App, selector: &str) -> CliResult<()> {
@@ -455,23 +483,45 @@ pub fn install_pkgfile(app: &mut App, pkgfile: &Path, selector: Option<String>) 
     let mut app_added = Vec::new();
 
     if pkgmgr == "opkg" {
+        app.log_info("Resolving opkg dependencies and app list...");
+
+        let kmod_list = manifest
+            .get_array("kmod")
+            .into_iter()
+            .filter(|item| !item.is_empty())
+            .collect::<Vec<_>>();
+        let base_list = manifest
+            .get_array("base")
+            .into_iter()
+            .filter(|item| !item.is_empty())
+            .collect::<Vec<_>>();
+
         opkg_update_ignore();
 
         precheck = build_precheck_report(&manifest, &depend_dir, &binary_dir, &app_list);
-        precheck_assert_no_missing(&precheck)?;
+        let missing = summarize_missing_precheck(&precheck);
+        if !missing.is_empty() {
+            app.log_warn(format!(
+                "dependency precheck: missing {}",
+                missing.join(" ")
+            ));
+            return Err(CliError::new(
+                E_RUNTIME,
+                format!("dependency precheck failed, missing: {}", missing.join(" ")),
+            ));
+        }
 
         let snap_before_tx = opkg_snapshot_installed();
 
-        for dep in manifest.get_array("kmod") {
+        for dep in &kmod_list {
             if dep.is_empty() {
                 continue;
             }
-            if !opkg_is_installed(&dep) {
-                opkg_install_pkg("kmod", &dep)?;
+            if !opkg_is_installed(dep) {
+                opkg_install_pkg("kmod", dep)?;
             }
         }
 
-        let base_list = manifest.get_array("base");
         let has_depend_dir = depend_dir.is_dir();
         install_via_feeds_or_ipk(app, "base", &base_list, &depend_dir, has_depend_dir)?;
 

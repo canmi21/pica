@@ -353,36 +353,6 @@ pub(crate) fn build_precheck_report(
     })
 }
 
-pub(crate) fn precheck_assert_no_missing(precheck: &Value) -> CliResult<()> {
-    let mut missing = Vec::new();
-
-    for (group, key) in [
-        (precheck.get("kmod"), "kmod"),
-        (precheck.get("base"), "base"),
-        (precheck.get("app"), "app"),
-    ] {
-        let Some(entries) = group.and_then(Value::as_array) else {
-            continue;
-        };
-        for entry in entries {
-            let status = entry.get("status").and_then(Value::as_str).unwrap_or("");
-            if status == "missing" {
-                let name = entry.get("name").and_then(Value::as_str).unwrap_or("");
-                missing.push(format!("{key}:{name}"));
-            }
-        }
-    }
-
-    if missing.is_empty() {
-        Ok(())
-    } else {
-        Err(CliError::new(
-            E_RUNTIME,
-            format!("dependency precheck failed, missing: {}", missing.join(" ")),
-        ))
-    }
-}
-
 pub(crate) fn resolve_lang(conf_file: &Path) -> String {
     let conf = read_json_file(conf_file).ok();
     conf.and_then(|value| {
