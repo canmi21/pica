@@ -1,10 +1,10 @@
 [package]
 name = "pica-cli-rs"
-version = "0.2.6"
+version = "0.2.7"
 edition = "2021"
 
 [[bin]]
-name = "pica-rs"
+name = "pica"
 path = "src/main.rs"
 
 [dependencies]

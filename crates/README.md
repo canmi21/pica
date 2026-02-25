@@ -1,11 +1,11 @@
-# pica-rs
+# pica-rust
 
 Rust workspace for pica migration.
 
 ## Binaries
 
-- `pica-rs` (CLI replacement for `legacy/pica-cli/pica`)
-- `pica-pack-rs` (packer replacement for `legacy/pica-pack/pica-pack`)
+- `pica` (CLI replacement for `legacy/pica-cli/pica`)
+- `pica-pack` (packer replacement for `legacy/pica-pack/pica-pack`)
 
 ## Goals
 
@@ -25,7 +25,7 @@ Rust workspace for pica migration.
 
 ## Implemented
 
-### `pica-pack-rs`
+### `pica-pack`
 
 - `build <staging_dir> [--outdir DIR]`
 - Manifest compatibility handling (`pkgver/pkgrel` and legacy fallback)
@@ -34,7 +34,7 @@ Rust workspace for pica migration.
 - Build manifest rewrite (`builddate/size/platform/arch/pkgver/pkgrel` injection)
 - Archive creation via system `tar`
 
-### `pica-rs`
+### `pica`
 
 - `-S [selector]` (no selector: sync repo metadata; with selector: install auto)
 - `-Q`, `-Qi`, `-Ql` (query installed db)

@@ -13,11 +13,11 @@ use std::process::{self, Command};
 
 fn usage() {
     println!(
-        "Usage:\n  pica-pack-rs build <staging_dir> [--outdir DIR]\n\
+        "Usage:\n  pica-pack build <staging_dir> [--outdir DIR]\n\
 \nstaging_dir must contain:\n  - manifest\n  - cmd/\n  - binary/ is optional\n  - src/ is optional\n  - depend/ is optional\n  - LICENSE is optional\n\
 \nIf binary/ exists, the recommended layout is:\n  binary/<platform>/<arch>/*.ipk\n\
 \nIf depend/ exists, the recommended layout is:\n  depend/<platform>/<arch>/*.ipk\n\
-\nWhen such layout is present, pica-pack-rs will build one package per\n<platform>/<arch> combination.\n\
+\nWhen such layout is present, pica-pack will build one package per\n<platform>/<arch> combination.\n\
 \nPackage filename:\n  <pkgname>-<pkgver>-<pkgrel>-<platform>-<arch>.pkg.tar.gz"
     );
 }
@@ -245,7 +245,7 @@ fn build_one(req: BuildRequest<'_>) -> PicaResult<()> {
     }
     msg2("Creating archive...");
 
-    let tmpdir = make_temp_dir("pica-pack-rs")?;
+    let tmpdir = make_temp_dir("pica-pack")?;
 
     let manifest_src = req.staging_dir.join("manifest");
     let manifest_dst = tmpdir.join("manifest");

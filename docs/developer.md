@@ -2,8 +2,8 @@
 
 本仓库当前包含两个子项目：
 
-- `crates/pica-pack-rs/`：核心 Rust 打包器（在构建机上生成 `.pkg.tar.gz`）
-- `crates/pica-cli-rs/`：核心 Rust OpenWrt 安装/管理器（提供 `pica-rs` 命令）
+- `crates/pica-pack-rs/`：核心 Rust 打包器（在构建机上生成 `.pkg.tar.gz`，提供 `pica-pack` 命令）
+- `crates/pica-cli-rs/`：核心 Rust OpenWrt 安装/管理器（提供 `pica` 命令）
 
 目标是“学习 Arch/pacman 的使用方式”，但在 OpenWrt 环境里以 `opkg` 完成真正的安装/卸载动作，类似于滚动更新。
 
@@ -31,7 +31,7 @@
 
 ## 版本约定
 
-- `pica-cli` 内置协议版本：`PICA_VERSION=0.2.6`
+- `pica-cli` 内置协议版本：`PICA_VERSION=0.2.7`
 - `manifest` 的 `pica` 字段表示最低兼容版本：`pica = <min pica-cli version>`（可选，不写不检查）
 - `pica -U` 安装时会校验 `manifest` 的 `pica` 与 CLI 是否一致；不一致直接失败（非 0 退出）。
 
@@ -234,10 +234,10 @@ luci-i18n-myapp-zh-cn
 输出日志风格参考 Arch `makepkg`：
 
 ```
-==> Making package: hello 0.2.6-1 (openwrt-any)
-  -> Pica version: 0.2.6
+==> Making package: hello 0.2.7-1 (openwrt-any)
+  -> Pica version: 0.2.7
   -> Creating archive...
-==> Finished: /tmp/pica-test/hello-0.2.6-1-openwrt-any.pkg.tar.gz
+==> Finished: /tmp/pica-test/hello-0.2.7-1-openwrt-any.pkg.tar.gz
 ```
 
 ### 示例
@@ -352,7 +352,7 @@ pica -Si myapp
 #### 安装/更新（-U）
 
 ```
-pica -U ./hello-0.2.6-1-openwrt-any.pkg.tar.gz
+pica -U ./hello-0.2.7-1-openwrt-any.pkg.tar.gz
 
 #### 全量升级（-Syu）
 
@@ -401,7 +401,7 @@ pica -R myapp
 
 ```
 pica -Q
-hello	0.2.6-1	amd64
+hello	0.2.7-1	amd64
 ```
 
 ## 仓库协议（repo.json，最小实现）
@@ -439,7 +439,7 @@ repo-root/
   "packages": [
     {
       "pkgname": "hello",
-      "pkgver": "0.2.6",
+      "pkgver": "0.2.7",
       "pkgrel": "1",
       "appname": "hello",
       "url": "https://github.com/miaoermua/pica",
@@ -448,8 +448,8 @@ repo-root/
       "branch": "stable",
       "os": "openwrt",
       "platform": "amd64",
-      "pica": "0.2.6",
-      "filename": "hello-0.2.6-1-amd64-all.pkg.tar.gz",
+      "pica": "0.2.7",
+      "filename": "hello-0.2.7-1-amd64-all.pkg.tar.gz",
       "sha256": "<sha256>",
       "size": 465
     }

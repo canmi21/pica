@@ -16,9 +16,27 @@ permissions:
   contents: read
 
 jobs:
+  test:
+    name: test (workspace)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run tests
+        run: cargo test --workspace --locked -- --nocapture
+
   build:
     name: build (${{ matrix.target }})
     runs-on: ubuntu-latest
+    needs: test
     strategy:
       fail-fast: false
       matrix:
@@ -59,8 +77,14 @@ jobs:
       - name: Prepare artifacts
         run: |
           mkdir -p dist
-          cp "target/${{ matrix.target }}/release/pica-rs" "dist/pica-rs-${{ matrix.target }}"
-          cp "target/${{ matrix.target }}/release/pica-pack-rs" "dist/pica-pack-rs-${{ matrix.target }}"
+          if [ "${{ matrix.target }}" = "x86_64-unknown-linux-musl" ]; then
+            arch=amd64
+          else
+            arch=arm64
+          fi
+
+          cp "target/${{ matrix.target }}/release/pica" "dist/pica.${arch}"
+          cp "target/${{ matrix.target }}/release/pica-pack" "dist/pica-pack.${arch}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
