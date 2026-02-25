@@ -98,6 +98,9 @@ pub struct Options {
     pub json_mode: JsonMode,
     pub non_interactive: bool,
     pub feed_policy: FeedPolicy,
+    pub fetch_timeout: u64,
+    pub fetch_retry: u32,
+    pub fetch_retry_delay: u64,
 }
 
 #[derive(Debug)]
@@ -202,6 +205,9 @@ pub fn parse_options(args: Vec<String>) -> CliResult<(Options, Vec<String>)> {
     let mut json_mode = JsonMode::None;
     let mut non_interactive = false;
     let mut feed_policy = FeedPolicy::Ask;
+    let mut fetch_timeout = 30u64;
+    let mut fetch_retry = 2u32;
+    let mut fetch_retry_delay = 1u64;
     let mut positional = Vec::new();
 
     let mut index = 0;
@@ -234,6 +240,36 @@ pub fn parse_options(args: Vec<String>) -> CliResult<(Options, Vec<String>)> {
                 })?;
                 index += 2;
             }
+            "--fetch-timeout" => {
+                let Some(value) = args.get(index + 1) else {
+                    return Err(CliError::new(
+                        E_CONFIG_INVALID,
+                        "--fetch-timeout requires <seconds>",
+                    ));
+                };
+                fetch_timeout = parse_positive_u64_option("--fetch-timeout", value)?;
+                index += 2;
+            }
+            "--fetch-retry" => {
+                let Some(value) = args.get(index + 1) else {
+                    return Err(CliError::new(
+                        E_CONFIG_INVALID,
+                        "--fetch-retry requires <count>",
+                    ));
+                };
+                fetch_retry = parse_u32_option("--fetch-retry", value)?;
+                index += 2;
+            }
+            "--fetch-retry-delay" => {
+                let Some(value) = args.get(index + 1) else {
+                    return Err(CliError::new(
+                        E_CONFIG_INVALID,
+                        "--fetch-retry-delay requires <seconds>",
+                    ));
+                };
+                fetch_retry_delay = parse_u64_option("--fetch-retry-delay", value)?;
+                index += 2;
+            }
             other => {
                 positional.push(other.to_string());
                 index += 1;
@@ -246,9 +282,41 @@ pub fn parse_options(args: Vec<String>) -> CliResult<(Options, Vec<String>)> {
             json_mode,
             non_interactive,
             feed_policy,
+            fetch_timeout,
+            fetch_retry,
+            fetch_retry_delay,
         },
         positional,
     ))
+}
+
+fn parse_positive_u64_option(flag: &str, value: &str) -> CliResult<u64> {
+    let parsed = parse_u64_option(flag, value)?;
+    if parsed == 0 {
+        return Err(CliError::new(
+            E_CONFIG_INVALID,
+            format!("invalid {flag}: {value}"),
+        ));
+    }
+    Ok(parsed)
+}
+
+fn parse_u64_option(flag: &str, value: &str) -> CliResult<u64> {
+    value.parse::<u64>().map_err(|_| {
+        CliError::new(
+            E_CONFIG_INVALID,
+            format!("invalid {flag}: {value}"),
+        )
+    })
+}
+
+fn parse_u32_option(flag: &str, value: &str) -> CliResult<u32> {
+    value.parse::<u32>().map_err(|_| {
+        CliError::new(
+            E_CONFIG_INVALID,
+            format!("invalid {flag}: {value}"),
+        )
+    })
 }
 
 pub fn ensure_dirs(paths: &Paths) -> CliResult<()> {
@@ -351,4 +419,50 @@ where
     env::var_os(key)
         .map(PathBuf::from)
         .unwrap_or_else(|| default.into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{parse_options, FeedPolicy};
+
+    #[test]
+    fn parse_options_fetch_settings() {
+        let input = vec![
+            "--fetch-timeout".to_string(),
+            "15".to_string(),
+            "--fetch-retry".to_string(),
+            "4".to_string(),
+            "--fetch-retry-delay".to_string(),
+            "2".to_string(),
+            "-S".to_string(),
+        ];
+
+        let (options, positional) = parse_options(input).expect("parse options");
+        assert_eq!(options.fetch_timeout, 15);
+        assert_eq!(options.fetch_retry, 4);
+        assert_eq!(options.fetch_retry_delay, 2);
+        assert_eq!(options.feed_policy, FeedPolicy::Ask);
+        assert_eq!(positional, vec!["-S".to_string()]);
+    }
+
+    #[test]
+    fn parse_options_rejects_invalid_fetch_timeout() {
+        let input = vec!["--fetch-timeout".to_string(), "0".to_string()];
+        let err = parse_options(input).expect_err("must reject zero timeout");
+        assert!(err.message.contains("--fetch-timeout"));
+    }
+
+    #[test]
+    fn parse_options_rejects_invalid_fetch_retry() {
+        let input = vec!["--fetch-retry".to_string(), "x".to_string()];
+        let err = parse_options(input).expect_err("must reject invalid retry");
+        assert!(err.message.contains("--fetch-retry"));
+    }
+
+    #[test]
+    fn parse_options_rejects_invalid_fetch_retry_delay() {
+        let input = vec!["--fetch-retry-delay".to_string(), "-1".to_string()];
+        let err = parse_options(input).expect_err("must reject invalid retry delay");
+        assert!(err.message.contains("--fetch-retry-delay"));
+    }
 }

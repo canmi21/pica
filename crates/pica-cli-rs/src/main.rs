@@ -49,6 +49,9 @@ fn main() {
                     json_mode: JsonMode::None,
                     non_interactive: false,
                     feed_policy: FeedPolicy::Ask,
+                    fetch_timeout: 30,
+                    fetch_retry: 2,
+                    fetch_retry_delay: 1,
                 },
             );
             app.emit_error(&err);

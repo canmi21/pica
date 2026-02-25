@@ -68,7 +68,13 @@ pub fn sync_repos(app: &mut App) -> CliResult<()> {
 
         app.log_info(format!("{name} downloading..."));
         let repo_json_url = format!("{}/repo.json", url.trim_end_matches('/'));
-        let repo_raw = fetch_url(&repo_json_url, crate::is_supported_url)?;
+        let repo_raw = fetch_url(
+            &repo_json_url,
+            crate::is_supported_url,
+            app.options.fetch_timeout,
+            app.options.fetch_retry,
+            app.options.fetch_retry_delay,
+        )?;
         let repo_text = String::from_utf8(repo_raw).map_err(|_| {
             CliError::new(
                 E_REPO_INVALID,

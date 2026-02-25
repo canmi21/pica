@@ -1,6 +1,6 @@
 use crate::{
-    CliError, CliResult, E_IO, E_MISSING_COMMAND, E_NO_SPACE, E_OPKG_INSTALL, E_OPKG_REMOVE,
-    E_RUNTIME,
+    CliError, CliResult, E_CONFIG_INVALID, E_IO, E_MISSING_COMMAND, E_NO_SPACE,
+    E_OPKG_INSTALL, E_OPKG_REMOVE, E_RUNTIME,
 };
 use std::env;
 use std::fs;
@@ -10,11 +10,24 @@ use std::process::Command;
 const OPKG_LISTS_DIRS: [&str; 2] = ["/var/opkg-lists", "/tmp/opkg-lists"];
 const OPKG_LOCK_FILES: [&str; 2] = ["/var/lock/opkg.lock", "/tmp/lock/opkg.lock"];
 
-pub fn fetch_url(url: &str, is_supported_url: fn(&str) -> bool) -> CliResult<Vec<u8>> {
+pub fn fetch_url(
+    url: &str,
+    is_supported_url: fn(&str) -> bool,
+    timeout_secs: u64,
+    retry: u32,
+    retry_delay_secs: u64,
+) -> CliResult<Vec<u8>> {
     if !is_supported_url(url) {
         return Err(CliError::new(
             E_RUNTIME,
             format!("unsupported URL: {url}"),
+        ));
+    }
+
+    if timeout_secs == 0 {
+        return Err(CliError::new(
+            E_CONFIG_INVALID,
+            format!("invalid --fetch-timeout: {timeout_secs}"),
         ));
     }
 
@@ -24,14 +37,79 @@ pub fn fetch_url(url: &str, is_supported_url: fn(&str) -> bool) -> CliResult<Vec
         });
     }
 
+    let max_attempts = retry.saturating_add(1);
+    let mut last_error = String::new();
+
     if has_command("uclient-fetch") {
-        return run_fetch("uclient-fetch", &["-O", "-", url]);
+        for attempt in 1..=max_attempts {
+            match run_fetch(
+                "uclient-fetch",
+                &["-T", &timeout_secs.to_string(), "-O", "-", url],
+            ) {
+                Ok(output) => return Ok(output),
+                Err(err) => {
+                    last_error = err.message;
+                    if attempt < max_attempts {
+                        std::thread::sleep(std::time::Duration::from_secs(retry_delay_secs));
+                    }
+                }
+            }
+        }
+        return Err(CliError::new(
+            E_RUNTIME,
+            format!(
+                "download failed after {max_attempts} attempts (timeout={timeout_secs}s): {url} detail=[{last_error}]"
+            ),
+        ));
     }
     if has_command("wget") {
-        return run_fetch("wget", &["-qO-", url]);
+        for attempt in 1..=max_attempts {
+            match run_fetch("wget", &["-T", &timeout_secs.to_string(), "-qO-", url]) {
+                Ok(output) => return Ok(output),
+                Err(err) => {
+                    last_error = err.message;
+                    if attempt < max_attempts {
+                        std::thread::sleep(std::time::Duration::from_secs(retry_delay_secs));
+                    }
+                }
+            }
+        }
+        return Err(CliError::new(
+            E_RUNTIME,
+            format!(
+                "download failed after {max_attempts} attempts (timeout={timeout_secs}s): {url} detail=[{last_error}]"
+            ),
+        ));
     }
     if has_command("curl") {
-        return run_fetch("curl", &["-fsSL", url]);
+        let timeout_text = timeout_secs.to_string();
+        for attempt in 1..=max_attempts {
+            match run_fetch(
+                "curl",
+                &[
+                    "--connect-timeout",
+                    &timeout_text,
+                    "--max-time",
+                    &timeout_text,
+                    "-fsSL",
+                    url,
+                ],
+            ) {
+                Ok(output) => return Ok(output),
+                Err(err) => {
+                    last_error = err.message;
+                    if attempt < max_attempts {
+                        std::thread::sleep(std::time::Duration::from_secs(retry_delay_secs));
+                    }
+                }
+            }
+        }
+        return Err(CliError::new(
+            E_RUNTIME,
+            format!(
+                "download failed after {max_attempts} attempts (timeout={timeout_secs}s): {url} detail=[{last_error}]"
+            ),
+        ));
     }
 
     Err(CliError::new(

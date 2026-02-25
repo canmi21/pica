@@ -253,7 +253,13 @@ pub fn install_pica_from_repo(app: &mut App, selector: &str) -> CliResult<()> {
         "Downloading {} ({}) from {}...",
         best.pkgname, best.cmpver, best.repo
     ));
-    let raw = fetch_url(&download_url, is_supported_url)?;
+    let raw = fetch_url(
+        &download_url,
+        is_supported_url,
+        app.options.fetch_timeout,
+        app.options.fetch_retry,
+        app.options.fetch_retry_delay,
+    )?;
 
     let actual_sha256 = sha256_hex(&raw)?;
     if !actual_sha256.eq_ignore_ascii_case(&best.sha256) {
@@ -292,7 +298,13 @@ pub fn install_pkg_source(app: &mut App, source: &str, selector: Option<String>)
         let cached = cache_pkgs.join(guessed);
 
         app.log_info(format!("Downloading pkg from URL: {source}"));
-        let raw = fetch_url(source, is_supported_url)?;
+        let raw = fetch_url(
+            source,
+            is_supported_url,
+            app.options.fetch_timeout,
+            app.options.fetch_retry,
+            app.options.fetch_retry_delay,
+        )?;
         write_file_atomic(&cached, &raw)?;
         return install_pkgfile(app, &cached, selector);
     }

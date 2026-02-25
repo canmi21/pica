@@ -763,6 +763,9 @@ mod tests {
                 json_mode: crate::JsonMode::None,
                 non_interactive: true,
                 feed_policy: FeedPolicy::FeedOnly,
+                fetch_timeout: 30,
+                fetch_retry: 2,
+                fetch_retry_delay: 1,
             },
         );
 
@@ -801,6 +804,9 @@ mod tests {
                 json_mode: crate::JsonMode::None,
                 non_interactive: true,
                 feed_policy: FeedPolicy::Ask,
+                fetch_timeout: 30,
+                fetch_retry: 2,
+                fetch_retry_delay: 1,
             },
         );
 
