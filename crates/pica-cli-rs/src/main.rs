@@ -96,6 +96,7 @@ fn main() {
     };
 
     let result = run_command(&mut app, &args);
+    cleanup_pkg_cache_with_notice(&mut app);
     drop(lock_guard);
 
     match result {

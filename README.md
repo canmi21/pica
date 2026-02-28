@@ -6,6 +6,8 @@ Pica Is a Compact Archiver - Pica 喜鹊是一款紧凑型打包器
 ![shell](https://ziadoua.github.io/m3-Markdown-Badges/badges/Shell/shell1.svg)
 ![licence](https://ziadoua.github.io/m3-Markdown-Badges/badges/LicenceGPLv3/licencegplv31.svg)
 
+The ultimate OpenWrt Pkgmgr solution
+
 该名字继承自 Wine 递归浪漫，简单紧凑而不落后，运用 Arch 系包管理器相似的滚动更新机制，在 OpenWrt 上体验强大统一且先进的软件包管理器。
 
 ## 特性

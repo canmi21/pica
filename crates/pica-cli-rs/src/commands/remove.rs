@@ -1,6 +1,6 @@
 use crate::{
     ensure_dirs, manifest_get_array, manifest_get_scalar, App, CliError, CliResult,
-    E_ARG_INVALID, E_CONFIG_INVALID,
+    E_ARG_INVALID,
 };
 use crate::state::{db_del_installed, read_json_file};
 use crate::system::{opkg_remove_pkg, run_command_capture_output};
@@ -32,7 +32,13 @@ pub fn remove_pkg(app: &mut App, pkgname: &str) -> CliResult<()> {
     };
 
     app.log_info(format!("Removing {pkgname}..."));
-    run_cmd_install_tree(app, &format!("{pkgname}/{cmd_remove}"), "remove")?;
+
+    let remove_target = if cmd_remove.starts_with('/' ) || cmd_remove.is_empty() {
+        cmd_remove.clone()
+    } else {
+        format!("{pkgname}/{cmd_remove}")
+    };
+    run_cmd_install_tree(app, &remove_target, "remove")?;
 
     let mut remove_set = BTreeSet::new();
     for app_name in manifest_get_array(&manifest, "app") {
@@ -74,6 +80,12 @@ pub fn remove_pkg(app: &mut App, pkgname: &str) -> CliResult<()> {
         let _ = fs::remove_dir_all(src_dir);
     }
 
+    let cmd_dir = Path::new("/usr/lib/pica/cmd").join(pkgname);
+    if cmd_dir.is_dir() {
+        app.log_info(format!("removing cmd dir: {}", cmd_dir.display()));
+        let _ = fs::remove_dir_all(cmd_dir);
+    }
+
     db_del_installed(&app.paths.db_file, pkgname)?;
     app.log_info("Transaction completed");
     Ok(())
@@ -84,6 +96,10 @@ fn run_cmd_install_tree(app: &mut App, cmd_rel: &str, label: &str) -> CliResult<
         return Ok(());
     }
 
+    if cmd_rel.ends_with('/') {
+        return Ok(());
+    }
+
     let cmd_path = if cmd_rel.starts_with('/') {
         PathBuf::from(cmd_rel)
     } else {
@@ -91,13 +107,11 @@ fn run_cmd_install_tree(app: &mut App, cmd_rel: &str, label: &str) -> CliResult<
     };
 
     if !cmd_path.is_file() {
-        return Err(CliError::new(
-            E_CONFIG_INVALID,
-            format!(
-                "{label} cmd not found: {cmd_rel} (expected at {})",
-                cmd_path.display()
-            ),
+        app.log_info(format!(
+            "Skip {label} cmd: {cmd_rel} (not found at {})",
+            cmd_path.display()
         ));
+        return Ok(());
     }
 
     app.log_info(format!("Running {label} cmd: {cmd_rel}"));

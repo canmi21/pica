@@ -332,6 +332,10 @@ luci = lua1
 - `src/` 可用于携带脚本/模板/Compose 清单，但容器运行与编排策略由外部工具负责（不由 Pica 托管）。
 - `cmd_install/cmd_update/cmd_remove` 是生命周期脚本（包内路径，一般在 `cmd/` 下），应按 POSIX `sh` 语法编写。
 - 生命周期脚本由系统 `sh` 执行（OpenWrt 默认 BusyBox `sh`），不再依赖 `bash`。
+- 生命周期脚本保留策略（默认）：`cmd_remove` 保留；`cmd_install/cmd_update` 执行后不保留。
+- 如果包内无任何生命周期脚本，视为无生命周期包：安装/升级/卸载均不会触发钩子执行。
+- 可在 `cmd/.env` 中声明保留策略：`PICA_KEEP_CMD_INSTALL/PICA_KEEP_CMD_UPDATE/PICA_KEEP_CMD_REMOVE/PICA_KEEP_CMD_ALL`（布尔值）。
+- 每次命令事务结束都会打印 `正在清理 pica 缓存`，并清理 `/var/lib/pica/cache/pkgs/` 目录内容。
 
 - `type` 允许声明应用形态标签，便于 pica 在安装阶段做额外兼容检查。
 - `type = luci` 表示“该包包含/依赖 LuCI Web UI”。如果声明了 `type = luci`，必须同时声明 `luci = lua1|js2`。
@@ -392,6 +396,11 @@ cmd/.env
 
 - 安装时保存到 `/etc/pica/env.d/<pkgname>.env`
 - 卸载时同步删除该 env 文件
+- 可选生命周期保留控制（布尔值）：
+  - `PICA_KEEP_CMD_INSTALL`
+  - `PICA_KEEP_CMD_UPDATE`
+  - `PICA_KEEP_CMD_REMOVE`
+  - `PICA_KEEP_CMD_ALL`
 
 ## type/luci：LuCI 版本/实现（可选）
 

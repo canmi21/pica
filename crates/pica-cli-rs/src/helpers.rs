@@ -636,6 +636,39 @@ pub(crate) fn ensure_dir(path: &Path) -> CliResult<()> {
     })
 }
 
+pub(crate) fn cleanup_pkg_cache_with_notice(app: &mut App) {
+    app.log_info("Cleaning up Pica cache");
+
+    let cache_pkgs_dir = app.paths.cache_dir.join("pkgs");
+    if !cache_pkgs_dir.is_dir() {
+        return;
+    }
+
+    let entries = match fs::read_dir(&cache_pkgs_dir) {
+        Ok(entries) => entries,
+        Err(err) => {
+            app.log_warn(format!(
+                "cleanup cache skipped: cannot read {}: {err}",
+                cache_pkgs_dir.display()
+            ));
+            return;
+        }
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let result = if path.is_dir() {
+            fs::remove_dir_all(&path)
+        } else {
+            fs::remove_file(&path)
+        };
+
+        if let Err(err) = result {
+            app.log_warn(format!("cleanup cache failed: {}: {err}", path.display()));
+        }
+    }
+}
+
 pub(crate) fn make_temp_dir(prefix: &str) -> CliResult<PathBuf> {
     core_make_temp_dir(prefix).map_err(CliError::from)
 }

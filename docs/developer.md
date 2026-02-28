@@ -268,7 +268,10 @@ luci-i18n-myapp-zh-cn
   - 安装数据库：`/var/lib/pica/db.json`
   - 仓库索引：`/var/lib/pica/index.json`
   - repo 缓存：`/var/lib/pica/cache/repos/<name>.json`
+  - pkg 缓存：`/var/lib/pica/cache/pkgs/*.pkg.tar.gz`（事务结束默认清理）
   - 并发锁文件：`/var/lib/pica/db.lck`
+- 生命周期脚本目录：`/usr/lib/pica/cmd/<pkgname>/`（默认仅保留 remove）
+- 生命周期资源目录：`/usr/lib/pica/src/<pkgname>/`
 
 并发约束：
 
@@ -376,11 +379,19 @@ pica -Syu
 - 最后处理 `app`：软件源有则可选择走软件源；软件源没有则必须使用包内 `binary/*.ipk`，否则失败。
 - 安装命令：将 `cmd/` 复制到 `/usr/bin/`
 - 若包内存在 `src/`：复制到 `/usr/lib/pica/src/<pkgname>/`，供生命周期脚本读取
+- 生命周期脚本保留：默认仅保留 `cmd_remove`；`cmd_install/cmd_update` 执行后默认不保留
+- 若包内没有生命周期脚本，安装/升级不会触发生命周期执行
+- 可在 `cmd/.env` 设置：
+  - `PICA_KEEP_CMD_INSTALL`
+  - `PICA_KEEP_CMD_UPDATE`
+  - `PICA_KEEP_CMD_REMOVE`
+  - `PICA_KEEP_CMD_ALL`
 - 写入本地安装数据库：`/var/lib/pica/db.json`
 - 写入安装审计报告：`/var/lib/pica/install-report.json`
   - 安装前依赖可用性检查（kmod/base/app）
   - 整个事务新增依赖列表
   - app 阶段新增依赖列表
+- 事务结束打印：`正在清理 pica 缓存`，并清理 `/var/lib/pica/cache/pkgs/`
 
 #### 卸载（-R）
 
@@ -396,6 +407,8 @@ pica -R myapp
 
 - 只按 `manifest` 的 `app = ...` 和 `app_i18n = ...` 计算卸载列表（`i18n=zh-cn` 时包含语言包）
 - 不做依赖保护/依赖树分析（依赖策略交给 opkg 与用户）
+- 若有 `cmd_remove` 且脚本存在，先执行 remove 生命周期
+- 卸载时会清理：`/etc/pica/env.d/<pkgname>.env`、`/usr/lib/pica/src/<pkgname>/`、`/usr/lib/pica/cmd/<pkgname>/`
 
 #### 查询（-Q）
 

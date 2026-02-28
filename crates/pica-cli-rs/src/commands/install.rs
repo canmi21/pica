@@ -39,6 +39,57 @@ impl Drop for TempDirGuard {
     }
 }
 
+fn cleanup_previous_hook_dir(pkgname: &str) {
+    let hook_dir = Path::new("/usr/lib/pica/cmd").join(pkgname);
+    if hook_dir.is_dir() {
+        let _ = fs::remove_dir_all(&hook_dir);
+    }
+}
+
+fn parse_bool_like(value: &str) -> Option<bool> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "on" => Some(true),
+        "0" | "false" | "no" | "off" => Some(false),
+        _ => None,
+    }
+}
+
+fn read_env_keep_flags(env_file: &Path) -> (Option<bool>, Option<bool>, Option<bool>, Option<bool>) {
+    let Ok(content) = fs::read_to_string(env_file) else {
+        return (None, None, None, None);
+    };
+
+    let mut keep_all = None;
+    let mut keep_install = None;
+    let mut keep_update = None;
+    let mut keep_remove = None;
+
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+
+        let key = key.trim();
+        let value = value.trim().trim_matches('"').trim_matches('\'');
+        let parsed = parse_bool_like(value);
+
+        match key {
+            "PICA_KEEP_CMD_ALL" => keep_all = parsed,
+            "PICA_KEEP_CMD_INSTALL" => keep_install = parsed,
+            "PICA_KEEP_CMD_UPDATE" => keep_update = parsed,
+            "PICA_KEEP_CMD_REMOVE" => keep_remove = parsed,
+            _ => {}
+        }
+    }
+
+    (keep_all, keep_install, keep_update, keep_remove)
+}
+
 fn summarize_missing_precheck(precheck: &Value) -> Vec<String> {
     let mut missing = Vec::new();
 
@@ -362,6 +413,18 @@ pub fn install_pkgfile(app: &mut App, pkgfile: &Path, selector: Option<String>) 
     let cmd_update = manifest.get_scalar("cmd_update");
     let cmd_remove = manifest.get_scalar("cmd_remove");
 
+    let env_file = tmpdir.join("cmd/.env");
+    let (env_keep_all, env_keep_install, env_keep_update, env_keep_remove) = if env_file.is_file() {
+        read_env_keep_flags(&env_file)
+    } else {
+        (None, None, None, None)
+    };
+
+    let keep_all_hooks = env_keep_all.unwrap_or(false);
+    let keep_install_hook = env_keep_install.unwrap_or(false);
+    let keep_update_hook = env_keep_update.unwrap_or(false);
+    let keep_remove_hook = env_keep_remove.unwrap_or(true);
+
     let canonical_selector = manifest.canonical_selector(&pkgname);
     let selector = selector.unwrap_or(canonical_selector);
 
@@ -554,26 +617,51 @@ pub fn install_pkgfile(app: &mut App, pkgfile: &Path, selector: Option<String>) 
         run_hook(app, &tmpdir, &cmd_install, "install")?;
     }
 
-    ensure_dir(Path::new("/usr/lib/pica/cmd").join(&pkgname).as_path())?;
-    for hook_rel in [&cmd_install, &cmd_update, &cmd_remove] {
-        if hook_rel.is_empty() || hook_rel.starts_with('/') {
-            continue;
-        }
+    cleanup_previous_hook_dir(&pkgname);
+
+    let mut hook_items: Vec<(&str, bool)> = Vec::new();
+    if !cmd_install.is_empty() && !cmd_install.starts_with('/') {
+        let keep = keep_all_hooks || keep_install_hook;
+        hook_items.push((cmd_install.as_str(), keep));
+    }
+    if !cmd_update.is_empty() && !cmd_update.starts_with('/') {
+        let keep = keep_all_hooks || keep_update_hook;
+        hook_items.push((cmd_update.as_str(), keep));
+    }
+    if !cmd_remove.is_empty() && !cmd_remove.starts_with('/') {
+        let keep = keep_all_hooks || keep_remove_hook;
+        hook_items.push((cmd_remove.as_str(), keep));
+    }
+
+    let mut kept_any_hook = false;
+    for (hook_rel, keep) in &hook_items {
         let source = tmpdir.join(hook_rel);
-        if source.is_file() {
-            let target = Path::new("/usr/lib/pica/cmd").join(&pkgname).join(hook_rel);
-            if let Some(parent) = target.parent() {
-                ensure_dir(parent)?;
-            }
-            fs::copy(&source, &target).map_err(|err| {
-                CliError::new(E_IO, format!("copy hook failed: {err}"))
-            })?;
-            installed_files.push(target.display().to_string());
-        } else {
+        if !source.is_file() {
             return Err(CliError::new(
                 E_PACKAGE_INVALID,
                 format!("cmd script not found in package: {hook_rel}"),
             ));
+        }
+
+        if !*keep {
+            continue;
+        }
+
+        let target = Path::new("/usr/lib/pica/cmd").join(&pkgname).join(hook_rel);
+        if let Some(parent) = target.parent() {
+            ensure_dir(parent)?;
+        }
+        fs::copy(&source, &target).map_err(|err| {
+            CliError::new(E_IO, format!("copy hook failed: {err}"))
+        })?;
+        installed_files.push(target.display().to_string());
+        kept_any_hook = true;
+    }
+
+    if !kept_any_hook {
+        let hook_dir = Path::new("/usr/lib/pica/cmd").join(&pkgname);
+        if hook_dir.is_dir() {
+            let _ = fs::remove_dir_all(&hook_dir);
         }
     }
 
