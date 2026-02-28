@@ -4,8 +4,8 @@ use crate::{
 };
 use crate::state::{ensure_json_object_field, read_json_file, write_json_atomic_pretty};
 use crate::system::{fetch_url, has_command, opkg_has_package, opkg_update_ignore};
-use pica_core::io::now_unix_secs;
-use pica_core::repo::parse_repo_json;
+use pica_pkg_core::io::now_unix_secs;
+use pica_pkg_core::repo::parse_repo_json;
 use serde_json::{json, Value};
 
 pub fn sync_repos(app: &mut App) -> CliResult<()> {

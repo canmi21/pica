@@ -1,6 +1,6 @@
 [package]
-name = "pica-pack-rs"
-version = "0.2.8"
+name = "pica-pkg-pack"
+version = "0.3.0"
 edition = "2021"
 
 [[bin]]
@@ -8,5 +8,5 @@ name = "pica-pack"
 path = "src/main.rs"
 
 [dependencies]
-pica-core = { path = "../pica-core" }
+pica-pkg-core = { path = "../pica-pkg-core" }
 serde_json = "1"

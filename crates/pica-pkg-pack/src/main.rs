@@ -1,10 +1,10 @@
-use pica_core::error::{PicaError, PicaResult};
-use pica_core::io::{
+use pica_pkg_core::error::{PicaError, PicaResult};
+use pica_pkg_core::io::{
     copy_dir_recursive, ensure_dir, make_temp_dir, now_unix_secs, resolve_script_dir_from_exe,
 };
-use pica_core::manifest::Manifest;
-use pica_core::repo::expected_filename;
-use pica_core::PICA_VERSION;
+use pica_pkg_core::manifest::Manifest;
+use pica_pkg_core::repo::expected_filename;
+use pica_pkg_core::PICA_VERSION;
 use std::collections::{BTreeSet, HashSet};
 use std::env;
 use std::fs;

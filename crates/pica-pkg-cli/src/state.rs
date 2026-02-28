@@ -2,7 +2,7 @@ use crate::{
     ensure_dirs, manifest_get_first, CliError, CliResult, Selector, E_DB_INVALID, E_IO,
     E_JSON_INVALID, E_RUNTIME,
 };
-use pica_core::io::now_unix_secs;
+use pica_pkg_core::io::now_unix_secs;
 use serde_json::{json, Map, Value};
 use std::ffi::OsString;
 use std::fs;

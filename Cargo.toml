@@ -1,8 +1,8 @@
 [workspace]
 members = [
-  "crates/pica-core",
-  "crates/pica-cli-rs",
-  "crates/pica-pack-rs",
+  "crates/pica-pkg-core",
+  "crates/pica-pkg-cli",
+  "crates/pica-pkg-pack",
 ]
 resolver = "2"
 

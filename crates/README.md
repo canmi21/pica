@@ -18,9 +18,9 @@ Rust workspace for pica migration.
 ```text
 ./
   crates/
-    pica-core/      # shared domain/runtime helpers
-    pica-cli-rs/    # device-side CLI
-    pica-pack-rs/   # build-side packer
+    pica-pkg-core/  # shared domain/runtime helpers
+    pica-pkg-cli/   # device-side CLI
+    pica-pkg-pack/  # build-side packer
 ```
 
 ## Implemented

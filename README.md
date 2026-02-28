@@ -39,7 +39,7 @@ The ultimate OpenWrt Pkgmgr solution
 - `pica --fetch-retry <count>`：下载重试次数（默认 2，表示总尝试次数=1+count）
 - `pica --fetch-retry-delay <seconds>`：重试间隔（默认 1 秒）
 
-说明：当前核心实现为 Rust（`crates/pica-cli-rs` / `crates/pica-pack-rs`），Bash 版本已归档到 `legacy/`（不再作为核心维护）。更完整的包标准/字段约定见 `docs/standard.md`。
+说明：当前核心实现为 Rust（`crates/pica-pkg-cli` / `crates/pica-pkg-pack`），Bash 版本已归档到 `legacy/`（不再作为核心维护）。更完整的包标准/字段约定见 `docs/standard.md`。
 
 补充：`pkgmgr=none` 的生命周期包可使用 `src/` 携带原始资源，安装时会落地到 `/usr/lib/pica/src/<pkgname>/`，供 `cmd_install/cmd_update/cmd_remove` 使用。
 

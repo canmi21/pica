@@ -14,11 +14,11 @@ use crate::types::{
 };
 use crate::state::read_json_file;
 use crate::helpers::*;
-use pica_core::manifest::{get_first as manifest_get_first, Manifest};
-use pica_core::repo::is_supported_url;
-use pica_core::selector::Selector;
-use pica_core::version::{pkgver_cmp_key, pkgver_ge, ver_ge};
-use pica_core::PICA_VERSION;
+use pica_pkg_core::manifest::{get_first as manifest_get_first, Manifest};
+use pica_pkg_core::repo::is_supported_url;
+use pica_pkg_core::selector::Selector;
+use pica_pkg_core::version::{pkgver_cmp_key, pkgver_ge, ver_ge};
+use pica_pkg_core::PICA_VERSION;
 use std::env;
 use std::process::{self};
 use crate::lock::LockGuard;

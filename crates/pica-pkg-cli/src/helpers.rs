@@ -4,10 +4,10 @@ use crate::{
     ensure_dirs, App, CliError, CliResult, FeedPolicy, Manifest, Selector, E_CONFIG_INVALID,
     E_INDEX_INVALID, E_IO, E_POLICY_INVALID, E_RUNTIME,
 };
-use pica_core::io::{
+use pica_pkg_core::io::{
     copy_dir_recursive as core_copy_dir_recursive, make_temp_dir as core_make_temp_dir,
 };
-use pica_core::version::pkgver_cmp_key;
+use pica_pkg_core::version::pkgver_cmp_key;
 use serde_json::{json, Value};
 use std::ffi::OsString;
 use std::fs;

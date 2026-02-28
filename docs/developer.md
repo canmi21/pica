@@ -2,8 +2,8 @@
 
 本仓库当前包含两个子项目：
 
-- `crates/pica-pack-rs/`：核心 Rust 打包器（在构建机上生成 `.pkg.tar.gz`，提供 `pica-pack` 命令）
-- `crates/pica-cli-rs/`：核心 Rust OpenWrt 安装/管理器（提供 `pica` 命令）
+- `crates/pica-pkg-pack/`：核心 Rust 打包器（在构建机上生成 `.pkg.tar.gz`，提供 `pica-pack` 命令）
+- `crates/pica-pkg-cli/`：核心 Rust OpenWrt 安装/管理器（提供 `pica` 命令）
 
 目标是“学习 Arch/pacman 的使用方式”，但在 OpenWrt 环境里以 `opkg` 完成真正的安装/卸载动作，类似于滚动更新。
 
@@ -12,9 +12,9 @@
 ```
 .
   crates/
-    pica-core/
-    pica-cli-rs/
-    pica-pack-rs/
+    pica-pkg-core/
+    pica-pkg-cli/
+    pica-pkg-pack/
   legacy/pica-pack/
     pica-pack
     example/

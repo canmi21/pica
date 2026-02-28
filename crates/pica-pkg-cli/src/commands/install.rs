@@ -16,8 +16,8 @@ use crate::system::{
     opkg_is_installed, opkg_snapshot_installed, opkg_update_ignore, run_command_text,
     run_tar_extract,
 };
-use pica_core::io::now_unix_secs;
-use pica_core::repo::is_supported_url;
+use pica_pkg_core::io::now_unix_secs;
+use pica_pkg_core::repo::is_supported_url;
 use serde_json::{json, Value};
 use std::process::Command;
 use std::fs;

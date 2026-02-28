@@ -1,4 +1,4 @@
-use pica_core::error::PicaError;
+use pica_pkg_core::error::PicaError;
 use serde_json::{json, Value};
 use std::env;
 use std::path::{Path, PathBuf};
