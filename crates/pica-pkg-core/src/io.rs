@@ -16,16 +16,22 @@ pub fn now_unix_nanos() -> u128 {
   SystemTime::now().duration_since(UNIX_EPOCH).map(|duration| duration.as_nanos()).unwrap_or(0)
 }
 
+/// # Errors
+/// Returns an error if the file cannot be read or contains invalid JSON.
 pub fn read_json_file(path: &Path) -> PicaResult<serde_json::Value> {
   let content = fs::read_to_string(path)?;
   Ok(serde_json::from_str(&content)?)
 }
 
+/// # Errors
+/// Returns an error if serialization fails or the file cannot be written.
 pub fn write_json_file_pretty(path: &Path, value: &serde_json::Value) -> PicaResult<()> {
   let content = serde_json::to_string_pretty(value)?;
   write_atomic(path, content.as_bytes())
 }
 
+/// # Errors
+/// Returns an error if the temporary file cannot be written or renamed.
 pub fn write_atomic(path: &Path, content: &[u8]) -> PicaResult<()> {
   let tmp = temp_path_for(path);
   if let Some(parent) = tmp.parent() {
@@ -42,17 +48,23 @@ fn temp_path_for(path: &Path) -> PathBuf {
   PathBuf::from(candidate)
 }
 
+/// # Errors
+/// Returns an error if the directory cannot be created.
 pub fn ensure_dir(path: &Path) -> PicaResult<()> {
   fs::create_dir_all(path)?;
   Ok(())
 }
 
+/// # Errors
+/// Returns an error if the temporary directory cannot be created.
 pub fn make_temp_dir(prefix: &str) -> PicaResult<PathBuf> {
   let path = env::temp_dir().join(format!("{prefix}-{}-{}", process::id(), now_unix_nanos()));
   fs::create_dir_all(&path)?;
   Ok(path)
 }
 
+/// # Errors
+/// Returns an error if the source is not a directory or any file operation fails.
 pub fn copy_dir_recursive(source: &Path, target: &Path) -> PicaResult<()> {
   if !source.is_dir() {
     return Err(PicaError::msg(format!("not a directory: {}", source.display())));
@@ -93,6 +105,8 @@ fn copy_symlink(source: &Path, target: &Path) -> PicaResult<()> {
   Ok(())
 }
 
+/// # Errors
+/// Returns an error if the executable path cannot be resolved.
 pub fn resolve_script_dir_from_exe() -> PicaResult<PathBuf> {
   let exe = env::current_exe()?;
   let Some(parent) = exe.parent() else {
@@ -101,11 +115,15 @@ pub fn resolve_script_dir_from_exe() -> PicaResult<PathBuf> {
   Ok(parent.to_path_buf())
 }
 
+/// # Errors
+/// Returns an error if the command cannot be spawned.
 pub fn run_command_capture(mut command: Command) -> PicaResult<Output> {
   let output = command.output()?;
   Ok(output)
 }
 
+/// # Errors
+/// Returns an error if the command fails or exits with a non-zero status.
 pub fn run_command_success(mut command: Command, context: &str) -> PicaResult<()> {
   let output = command.output()?;
   if output.status.success() {

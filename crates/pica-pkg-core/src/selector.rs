@@ -9,6 +9,8 @@ pub struct Selector {
 }
 
 impl Selector {
+  /// # Errors
+  /// Returns an error string if the selector syntax is invalid.
   pub fn parse(raw: &str) -> Result<Self, String> {
     let norm = raw.replace('：', ":").replace('（', "(").replace('）', ")");
     let structured = Self::is_structured(&norm);

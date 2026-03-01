@@ -11,11 +11,15 @@ pub struct Manifest {
 }
 
 impl Manifest {
+  /// # Errors
+  /// Returns an error if the file cannot be read or parsed.
   pub fn from_file(path: impl AsRef<Path>) -> PicaResult<Self> {
     let content = fs::read_to_string(path)?;
     Self::from_text(&content)
   }
 
+  /// # Errors
+  /// This function is infallible in practice but returns `PicaResult` for API consistency.
   pub fn from_text(content: &str) -> PicaResult<Self> {
     let mut map = Map::<String, Value>::new();
 
@@ -120,6 +124,8 @@ impl Manifest {
     self
   }
 
+  /// # Errors
+  /// Returns an error if the key is missing or its value is empty.
   pub fn require_non_empty(&self, key: &str) -> PicaResult<String> {
     let value = self.get_first(key);
     if value.is_empty() {
@@ -151,6 +157,8 @@ impl Manifest {
     }
   }
 
+  /// # Errors
+  /// Returns an error if JSON serialization fails.
   pub fn to_string(&self) -> PicaResult<String> {
     Ok(serde_json::to_string(&self.value)?)
   }

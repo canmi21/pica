@@ -52,12 +52,16 @@ impl RepoPackage {
   }
 }
 
+/// # Errors
+/// Returns an error if JSON parsing fails or validation detects invalid entries.
 pub fn parse_repo_json(content: &str) -> PicaResult<RepoJson> {
   let parsed: RepoJson = serde_json::from_str(content)?;
   validate_repo(&parsed)?;
   Ok(parsed)
 }
 
+/// # Errors
+/// Returns an error if the schema version is wrong or any package entry is invalid.
 pub fn validate_repo(repo: &RepoJson) -> PicaResult<()> {
   if repo.schema != 1 {
     return Err(PicaError::msg("schema must be 1"));
