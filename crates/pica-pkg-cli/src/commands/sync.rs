@@ -170,7 +170,8 @@ fn append_dep_list(output: &mut Vec<String>, value: Option<&Value>) {
 
 #[cfg(test)]
 mod tests {
-  use super::*;
+  use super::{append_dep_list, collect_declared_dependencies};
+  use serde_json::json;
 
   #[test]
   fn collect_declared_dependencies_merges_and_dedups() {

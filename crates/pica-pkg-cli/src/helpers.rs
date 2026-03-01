@@ -616,7 +616,12 @@ pub(crate) fn manifest_get_scalar(value: &Value, key: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-  use super::*;
+  use super::{
+    install_via_feeds_or_ipk, manifest_get_array, manifest_get_scalar, normalize_uname,
+    pkg_list_diff_added, reorder_app_list, should_use_feeds, App, FeedPolicy,
+  };
+  use serde_json::json;
+  use std::path::Path;
 
   #[test]
   fn normalize_uname_maps_common_values() {

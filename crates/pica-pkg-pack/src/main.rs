@@ -499,7 +499,12 @@ fn collect_archs(roots: &[&Path], platform: &str) -> PicaResult<Vec<String>> {
 
 #[cfg(test)]
 mod tests {
-  use super::*;
+  use super::{
+    collect_archs, collect_platforms, has_platform_arch_matrix, main_build,
+    rewrite_manifest_for_build,
+  };
+  use std::fs;
+  use std::path::PathBuf;
   use std::time::{SystemTime, UNIX_EPOCH};
 
   fn unique_tmp_dir(name: &str) -> PathBuf {

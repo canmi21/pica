@@ -189,7 +189,13 @@ pub fn ensure_json_object_field(value: &mut Value, key: &str) -> CliResult<()> {
 
 #[cfg(test)]
 mod tests {
-  use super::*;
+  use super::{
+    db_find_installed_pkgname_by_selector, ensure_json_object_field, write_json_atomic_pretty,
+  };
+  use crate::{Selector, E_RUNTIME};
+  use serde_json::{json, Value};
+  use std::fs;
+  use std::path::PathBuf;
   use std::time::{SystemTime, UNIX_EPOCH};
 
   fn unique_tmp_path(name: &str) -> PathBuf {

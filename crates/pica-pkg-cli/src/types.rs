@@ -373,7 +373,7 @@ mod tests {
       "-S".to_string(),
     ];
 
-    let (options, positional) = parse_options(input).expect("parse options");
+    let (options, positional) = parse_options(&input).expect("parse options");
     assert_eq!(options.fetch_timeout, 15);
     assert_eq!(options.fetch_retry, 4);
     assert_eq!(options.fetch_retry_delay, 2);
@@ -384,21 +384,21 @@ mod tests {
   #[test]
   fn parse_options_rejects_invalid_fetch_timeout() {
     let input = vec!["--fetch-timeout".to_string(), "0".to_string()];
-    let err = parse_options(input).expect_err("must reject zero timeout");
+    let err = parse_options(&input).expect_err("must reject zero timeout");
     assert!(err.message.contains("--fetch-timeout"));
   }
 
   #[test]
   fn parse_options_rejects_invalid_fetch_retry() {
     let input = vec!["--fetch-retry".to_string(), "x".to_string()];
-    let err = parse_options(input).expect_err("must reject invalid retry");
+    let err = parse_options(&input).expect_err("must reject invalid retry");
     assert!(err.message.contains("--fetch-retry"));
   }
 
   #[test]
   fn parse_options_rejects_invalid_fetch_retry_delay() {
     let input = vec!["--fetch-retry-delay".to_string(), "-1".to_string()];
-    let err = parse_options(input).expect_err("must reject invalid retry delay");
+    let err = parse_options(&input).expect_err("must reject invalid retry delay");
     assert!(err.message.contains("--fetch-retry-delay"));
   }
 }
