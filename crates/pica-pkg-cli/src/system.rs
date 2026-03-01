@@ -34,71 +34,50 @@ pub fn fetch_url(
   }
 
   let max_attempts = retry.saturating_add(1);
-  let mut last_error = String::new();
+  let timeout_text = timeout_secs.to_string();
 
-  if has_command("uclient-fetch") {
-    for attempt in 1..=max_attempts {
-      match run_fetch("uclient-fetch", &["-T", &timeout_secs.to_string(), "-O", "-", url]) {
-        Ok(output) => return Ok(output),
-        Err(err) => {
-          last_error = err.message;
-          if attempt < max_attempts {
-            std::thread::sleep(std::time::Duration::from_secs(retry_delay_secs));
-          }
-        }
-      }
+  let fetchers: &[(&str, &[&str])] = &[
+    ("uclient-fetch", &["-T", &timeout_text, "-O", "-", url]),
+    ("wget", &["-T", &timeout_text, "-qO-", url]),
+    ("curl", &["--connect-timeout", &timeout_text, "--max-time", &timeout_text, "-fsSL", url]),
+  ];
+
+  for &(cmd, args) in fetchers {
+    if !has_command(cmd) {
+      continue;
     }
-    return Err(CliError::new(
-            E_RUNTIME,
-            format!(
-                "download failed after {max_attempts} attempts (timeout={timeout_secs}s): {url} detail=[{last_error}]"
-            ),
-        ));
-  }
-  if has_command("wget") {
-    for attempt in 1..=max_attempts {
-      match run_fetch("wget", &["-T", &timeout_secs.to_string(), "-qO-", url]) {
-        Ok(output) => return Ok(output),
-        Err(err) => {
-          last_error = err.message;
-          if attempt < max_attempts {
-            std::thread::sleep(std::time::Duration::from_secs(retry_delay_secs));
-          }
-        }
-      }
-    }
-    return Err(CliError::new(
-            E_RUNTIME,
-            format!(
-                "download failed after {max_attempts} attempts (timeout={timeout_secs}s): {url} detail=[{last_error}]"
-            ),
-        ));
-  }
-  if has_command("curl") {
-    let timeout_text = timeout_secs.to_string();
-    for attempt in 1..=max_attempts {
-      match run_fetch(
-        "curl",
-        &["--connect-timeout", &timeout_text, "--max-time", &timeout_text, "-fsSL", url],
-      ) {
-        Ok(output) => return Ok(output),
-        Err(err) => {
-          last_error = err.message;
-          if attempt < max_attempts {
-            std::thread::sleep(std::time::Duration::from_secs(retry_delay_secs));
-          }
-        }
-      }
-    }
-    return Err(CliError::new(
-            E_RUNTIME,
-            format!(
-                "download failed after {max_attempts} attempts (timeout={timeout_secs}s): {url} detail=[{last_error}]"
-            ),
-        ));
+    return try_fetch_with_retry(cmd, args, max_attempts, retry_delay_secs, timeout_secs, url);
   }
 
   Err(CliError::new(E_MISSING_COMMAND, "no fetch tool found (need uclient-fetch, wget, or curl)"))
+}
+
+fn try_fetch_with_retry(
+  cmd: &str,
+  args: &[&str],
+  max_attempts: u32,
+  retry_delay_secs: u64,
+  timeout_secs: u64,
+  url: &str,
+) -> CliResult<Vec<u8>> {
+  let mut last_error = String::new();
+  for attempt in 1..=max_attempts {
+    match run_fetch(cmd, args) {
+      Ok(output) => return Ok(output),
+      Err(err) => {
+        last_error = err.message;
+        if attempt < max_attempts {
+          std::thread::sleep(std::time::Duration::from_secs(retry_delay_secs));
+        }
+      }
+    }
+  }
+  Err(CliError::new(
+    E_RUNTIME,
+    format!(
+      "download failed after {max_attempts} attempts (timeout={timeout_secs}s): {url} detail=[{last_error}]"
+    ),
+  ))
 }
 
 pub fn need_cmd(name: &str) -> CliResult<()> {

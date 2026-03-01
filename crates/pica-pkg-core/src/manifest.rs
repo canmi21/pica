@@ -82,8 +82,7 @@ impl Manifest {
 
   #[must_use]
   pub fn canonical_selector(&self, fallback_pkgname: &str) -> String {
-    let appname = self.get_first("appname").chars().collect::<String>();
-
+    let appname = self.get_first("appname");
     let appname = if appname.is_empty() { fallback_pkgname.to_string() } else { appname };
 
     let selector = Selector {
