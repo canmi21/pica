@@ -3,6 +3,9 @@ name = "pica-pkg-cli"
 version = "0.3.0"
 edition = "2021"
 
+[lints]
+workspace = true
+
 [[bin]]
 name = "pica"
 path = "src/main.rs"
