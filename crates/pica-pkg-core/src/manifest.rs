@@ -54,24 +54,29 @@ impl Manifest {
     Ok(Self { value: Value::Object(map) })
   }
 
+  #[must_use]
   pub fn get_first(&self, key: &str) -> String {
     get_first(&self.value, key)
   }
 
+  #[must_use]
   pub fn get_scalar(&self, key: &str) -> String {
     get_scalar(&self.value, key)
   }
 
+  #[must_use]
   pub fn get_array(&self, key: &str) -> Vec<String> {
     get_array(&self.value, key)
   }
 
+  #[must_use]
   pub fn pkgver_display(&self) -> String {
     let pkgver = self.get_first("pkgver");
     let pkgrel = self.get_first("pkgrel");
     pkgver_cmp_key(&pkgver, &pkgrel)
   }
 
+  #[must_use]
   pub fn canonical_selector(&self, fallback_pkgname: &str) -> String {
     let appname = self.get_first("appname").chars().collect::<String>();
 
@@ -87,10 +92,12 @@ impl Manifest {
     selector.to_canonical_string()
   }
 
+  #[must_use]
   pub fn has_type(&self, target: &str) -> bool {
     self.get_array("type").into_iter().any(|item| item == target)
   }
 
+  #[must_use]
   pub fn with_source_default(mut self, source: &str) -> Self {
     if self.value.get("source").is_none() {
       if let Some(obj) = self.value.as_object_mut() {
@@ -100,6 +107,7 @@ impl Manifest {
     self
   }
 
+  #[must_use]
   pub fn with_selector_defaults(mut self, fallback_pkgname: &str) -> Self {
     if let Some(obj) = self.value.as_object_mut() {
       let _ = fallback_pkgname;
@@ -121,6 +129,7 @@ impl Manifest {
     }
   }
 
+  #[must_use]
   pub fn to_pretty_text(&self) -> String {
     let mut lines = Vec::new();
     if let Some(obj) = self.value.as_object() {
@@ -147,6 +156,7 @@ impl Manifest {
   }
 }
 
+#[must_use]
 pub fn get_first(value: &Value, key: &str) -> String {
   let Some(entry) = value.get(key) else {
     return String::new();
@@ -158,6 +168,7 @@ pub fn get_first(value: &Value, key: &str) -> String {
   }
 }
 
+#[must_use]
 pub fn get_scalar(value: &Value, key: &str) -> String {
   let Some(entry) = value.get(key) else {
     return String::new();
@@ -168,6 +179,7 @@ pub fn get_scalar(value: &Value, key: &str) -> String {
   }
 }
 
+#[must_use]
 pub fn get_array(value: &Value, key: &str) -> Vec<String> {
   let Some(entry) = value.get(key) else {
     return Vec::new();

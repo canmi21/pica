@@ -63,6 +63,7 @@ impl Selector {
     Ok(Self { raw: raw.to_string(), norm: norm.clone(), appname: norm, branch: String::new() })
   }
 
+  #[must_use]
   pub fn is_structured(value: &str) -> bool {
     value.contains('@')
       || value.contains(':')
@@ -71,6 +72,7 @@ impl Selector {
       || value.contains('）')
   }
 
+  #[must_use]
   pub fn to_canonical_string(&self) -> String {
     let mut out = self.appname.clone();
     if !self.branch.is_empty() {

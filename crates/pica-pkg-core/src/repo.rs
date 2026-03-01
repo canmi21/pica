@@ -41,10 +41,12 @@ pub struct RepoPackage {
 }
 
 impl RepoPackage {
+  #[must_use]
   pub fn app_key(&self) -> &str {
     self.appname.as_deref().unwrap_or(&self.pkgname)
   }
 
+  #[must_use]
   pub fn version_key(&self) -> String {
     pkgver_cmp_key(&self.pkgver, &self.pkgrel)
   }
@@ -118,6 +120,7 @@ fn validate_filename(pkg: &RepoPackage) -> PicaResult<()> {
   Ok(())
 }
 
+#[must_use]
 pub fn expected_filename(
   pkgname: &str,
   pkgver: &str,
@@ -132,6 +135,7 @@ pub fn expected_filename(
   }
 }
 
+#[must_use]
 pub fn is_supported_url(value: &str) -> bool {
   value.starts_with("http://") || value.starts_with("https://") || value.starts_with("file://")
 }

@@ -1,9 +1,11 @@
 use std::cmp::Ordering;
 
+#[must_use]
 pub fn ver_ge(a: &str, b: &str) -> bool {
   compare_dot_numeric(a, b).is_some_and(|ord| ord != Ordering::Less)
 }
 
+#[must_use]
 pub fn pkgver_cmp_key(pkgver: &str, pkgrel: &str) -> String {
   if pkgrel.is_empty() {
     pkgver.to_string()
@@ -12,6 +14,7 @@ pub fn pkgver_cmp_key(pkgver: &str, pkgrel: &str) -> String {
   }
 }
 
+#[must_use]
 pub fn pkgver_ge(a: &str, b: &str) -> bool {
   if b.is_empty() {
     return true;
